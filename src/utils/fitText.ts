@@ -27,6 +27,17 @@ function getCtx(): CanvasRenderingContext2D {
 
 const LINE_HEIGHT_MULTIPLIER = 1.2;
 
+/**
+ * Number of line-heights reserved as empty top + bottom buffer when computing
+ * the maximum fitting font size. With `VERTICAL_BUFFER_LINES = 4` (= 2 lines
+ * of breathing room at the top + 2 at the bottom of the note's inner area),
+ * fitText finds the largest font where the wrapped text fits within
+ * `innerHeight - 4 * lineHeight`. The remaining buffer becomes visual
+ * padding around the centered text — the note never feels cramped, the
+ * caret on an empty note is readable but not aggressively huge.
+ */
+const VERTICAL_BUFFER_LINES = 4;
+
 function buildFontString(fontSize: number, fontFamily: NoteFontFamily): string {
   const stack = FONT_STACKS[fontFamily];
   const style = FONT_STYLE[fontFamily];
@@ -62,6 +73,13 @@ function fitsAt(
   const ctx = getCtx();
   ctx.font = buildFontString(fontSize, fontFamily);
 
+  const lineHeight = fontSize * LINE_HEIGHT_MULTIPLIER;
+  // Reserve 2 line-heights of empty space at the top + 2 at the bottom so the
+  // text never visually fills the note edge-to-edge. The font that fits the
+  // remaining `effectiveHeight` is what the binary search will pick.
+  const effectiveHeight = innerHeight - VERTICAL_BUFFER_LINES * lineHeight;
+  if (effectiveHeight <= 0) return false;
+
   // Split user-entered newlines, then wrap each segment into the inner width.
   const segments = text.split(/\n/);
   const lines: string[] = [];
@@ -92,8 +110,8 @@ function fitsAt(
     }
   }
 
-  const totalHeight = lines.length * fontSize * LINE_HEIGHT_MULTIPLIER;
-  return totalHeight <= innerHeight;
+  const totalHeight = lines.length * lineHeight;
+  return totalHeight <= effectiveHeight;
 }
 
 export function fitText(

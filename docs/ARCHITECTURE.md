@@ -150,7 +150,11 @@ To avoid a one-frame flash from `translate3d(0,0,0)` before the first rAF tick, 
 
 ### Wheel forwarding
 
-A note has `pointer-events: auto` so drag/click works. Without intervention this means wheel events that land on the note never reach the canvas — and panning halts the moment the cursor enters a note. Each `Note` attaches a non-passive `wheel` listener (`{ passive: false }`) on its root and re-dispatches a fresh `WheelEvent` on the host's `<canvas>` element. The host's `useCanvasCamera` wheel listener fires as if the wheel had landed on the canvas. `e.preventDefault()` blocks the browser's default scroll.
+Every `pointer-events: auto` surface owned by a note (root, styling button container, styling popup container) acts as a wheel sink — without intervention, the moment the cursor crosses any of them the canvas's wheel listener stops firing and panning halts.
+
+Each `Note` attaches a non-passive `wheel` listener (`{ passive: false }`) to ALL THREE of those refs (`rootRef`, `stylingBtnContainerRef`, `popupContainerRef`) and re-dispatches a fresh `WheelEvent` on the host's `<canvas>` element via the shared `forwardWheelToCanvas(e)` helper. The host's `useCanvasCamera` wheel listener fires as if the wheel had landed on the canvas; `e.preventDefault()` blocks the browser's default scroll. Synthetic events are untrusted (`isTrusted: false`) but the host's listener only reads `delta*` / `client*` / modifier keys — all of which we forward verbatim.
+
+Listener attachment for the styling button + popup containers re-runs on `[showChrome, popupOpen]` so the listener is always bound to the live DOM node (both containers are conditionally mounted).
 
 `onIconClick` uses `viewportCenterWorld(vp)` to drop new notes at the visible center.
 
@@ -192,9 +196,11 @@ Each `Note` waits for `document.fonts.ready` AND specifically `document.fonts.lo
 
 ## Dynamic font sizing (`utils/fitText.ts`)
 
-Binary search the integer range `[MIN_FIT_FONT_SIZE, MAX_FIT_FONT_SIZE]`. For each candidate, build a CSS font string from `FONT_STACKS` + `FONT_WEIGHT` + `FONT_STYLE`, set it on a singleton offscreen canvas-2d context, wrap text into the inner box (`size - 2*NOTE_PADDING`) using greedy word-wrap, sum line heights with `LINE_HEIGHT_MULTIPLIER = 1.2`. The largest font that doesn't overflow `innerHeight` wins.
+Binary search the integer range `[MIN_FIT_FONT_SIZE, MAX_FIT_FONT_SIZE]`. For each candidate, build a CSS font string from `FONT_STACKS` + `FONT_WEIGHT` + `FONT_STYLE`, set it on a singleton offscreen canvas-2d context, wrap text into the inner box (`size - 2*NOTE_PADDING`) using greedy word-wrap, sum line heights with `LINE_HEIGHT_MULTIPLIER = 1.2`. The largest font that fits wins.
 
-**Empty text is sized as a single character** (probe = `'M'`). For a default-sized note this lets the caret scale up to ~`MAX_FIT_FONT_SIZE = 96` and gives the user an obvious "type here" target. As soon as content is added the size recomputes.
+**Vertical buffer**: `VERTICAL_BUFFER_LINES = 4` line-heights are reserved as empty top + bottom space (2 above + 2 below the text). The constraint `totalTextHeight ≤ innerHeight − 4 * lineHeight` is what the binary search optimises against. The remaining buffer becomes natural breathing room around the centered text — the note never feels cramped, the caret on an empty note is readable but not aggressively huge.
+
+**Empty text is sized as a single character** (probe = `'M'`). With the vertical buffer in place a default-sized 220×220 note's empty caret lands around `~32-36 px` (capped by `MAX_FIT_FONT_SIZE = 96`), giving the user an obvious "type here" target without feeling overwhelming. As soon as content is added the size recomputes.
 
 ## Editor centering
 

@@ -41,7 +41,8 @@ Font is dynamic — size is recomputed via `utils/fitText.ts` on every render, n
 
 - `MIN_FIT_FONT_SIZE = 10`, `MAX_FIT_FONT_SIZE = 96` (in world units).
 - `LINE_HEIGHT_MULTIPLIER = 1.2`.
-- **Empty text is sized as a single character** (probe = `'M'`). For a default-sized note this caps at `MAX_FIT_FONT_SIZE = 96`, which makes the caret prominent and immediately invites typing. As soon as the user adds more text, fitText recomputes and shrinks the size to fit the actual content.
+- `VERTICAL_BUFFER_LINES = 4` — fitText reserves 2 line-heights of empty space at the top + 2 at the bottom of the inner area so text never visually fills the note edge-to-edge. The font that fits `innerHeight − 4 * lineHeight` is what the binary search picks.
+- **Empty text is sized as a single character** (probe = `'M'`). With the vertical buffer in place a default 220×220 note caret lands around `~32-36 px` — readable and inviting without being overwhelming. Caps at `MAX_FIT_FONT_SIZE = 96`. As soon as the user adds more text, fitText recomputes and shrinks the size to fit the actual content.
 - The textarea has no `placeholder` text — the large caret on an empty colored note is sufficient affordance.
 
 Migration: legacy notes with `fontFamily: 'serif'` (older plugin versions) are mapped to `'marker'` on read in `store/notesStore.ts` `normalizeNote`.

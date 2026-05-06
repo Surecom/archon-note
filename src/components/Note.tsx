@@ -87,6 +87,39 @@ function resizeHandleRect(edge: ResizeEdge, hitSize: number): React.CSSPropertie
   }
 }
 
+/**
+ * Re-dispatch a wheel event onto the host's <canvas> so panning continues
+ * smoothly when the cursor is over a note, the styling button or the styling
+ * popup. Without this, every pointer-events:auto element above the canvas
+ * acts as a wheel sink and pan halts. Browsers treat synthetic events as
+ * untrusted but the host's wheel listener doesn't check `isTrusted` — it
+ * only reads delta / client coordinates, which we forward verbatim.
+ *
+ * Used as the listener body for non-passive `wheel` event subscriptions.
+ */
+function forwardWheelToCanvas(e: WheelEvent): void {
+  const canvas = document.querySelector('main canvas') as HTMLCanvasElement | null;
+  if (!canvas) return;
+  e.preventDefault();
+  e.stopPropagation();
+  canvas.dispatchEvent(new WheelEvent('wheel', {
+    bubbles: true,
+    cancelable: true,
+    deltaX: e.deltaX,
+    deltaY: e.deltaY,
+    deltaZ: e.deltaZ,
+    deltaMode: e.deltaMode,
+    clientX: e.clientX,
+    clientY: e.clientY,
+    screenX: e.screenX,
+    screenY: e.screenY,
+    ctrlKey: e.ctrlKey,
+    shiftKey: e.shiftKey,
+    altKey: e.altKey,
+    metaKey: e.metaKey,
+  }));
+}
+
 function applyResize(
   edge: ResizeEdge,
   origPos: { x: number; y: number },
@@ -419,45 +452,42 @@ const Note: React.FC<Props> = ({
   }, [state, flushText, onRequestSelect, onRequestDeselect, api, note.id]);
 
   // ------------------------------------------------------------------
-  // Forward wheel events to the canvas. Without this, panning stops as
-  // soon as the cursor hovers a note (the note has pointer-events: auto
-  // for drag/click, so wheel events target the note instead of the canvas).
-  // We re-dispatch a fresh WheelEvent on the canvas element so the host's
-  // useCanvasCamera wheel listener fires regardless of cursor position.
+  // Forward wheel events to the canvas for ALL pointer-events:auto surfaces
+  // owned by this note: the note root, the styling button container, and the
+  // styling popup container. Without forwarding, the cursor passing over any
+  // of them halts panning (wheel target = element, not canvas, so the host's
+  // useCanvasCamera wheel listener doesn't fire).
   //
   // Must use addEventListener with `passive: false` — React's onWheel is
-  // passive in React 18, so e.preventDefault() inside an inline handler
-  // would be ignored, and the page would scroll behind the canvas.
+  // passive in React 18, so e.preventDefault() inside an inline handler is
+  // ignored and the page would scroll behind the canvas.
+  //
+  // Each useEffect re-runs whenever the relevant element mounts/unmounts
+  // (popup is conditional on popupOpen; styling button is conditional on
+  // showChrome && !popupOpen) so listeners are always attached to the live
+  // DOM node.
   // ------------------------------------------------------------------
 
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    const handler = (e: WheelEvent) => {
-      const canvas = document.querySelector('main canvas') as HTMLCanvasElement | null;
-      if (!canvas) return;
-      e.preventDefault();
-      e.stopPropagation();
-      canvas.dispatchEvent(new WheelEvent('wheel', {
-        bubbles: true,
-        cancelable: true,
-        deltaX: e.deltaX,
-        deltaY: e.deltaY,
-        deltaZ: e.deltaZ,
-        deltaMode: e.deltaMode,
-        clientX: e.clientX,
-        clientY: e.clientY,
-        screenX: e.screenX,
-        screenY: e.screenY,
-        ctrlKey: e.ctrlKey,
-        shiftKey: e.shiftKey,
-        altKey: e.altKey,
-        metaKey: e.metaKey,
-      }));
-    };
-    root.addEventListener('wheel', handler, { passive: false });
-    return () => root.removeEventListener('wheel', handler);
+    root.addEventListener('wheel', forwardWheelToCanvas, { passive: false });
+    return () => root.removeEventListener('wheel', forwardWheelToCanvas);
   }, []);
+
+  useEffect(() => {
+    const el = stylingBtnContainerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', forwardWheelToCanvas, { passive: false });
+    return () => el.removeEventListener('wheel', forwardWheelToCanvas);
+  }, [showChrome, popupOpen]);
+
+  useEffect(() => {
+    const el = popupContainerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', forwardWheelToCanvas, { passive: false });
+    return () => el.removeEventListener('wheel', forwardWheelToCanvas);
+  }, [showChrome, popupOpen]);
 
   // ------------------------------------------------------------------
   // The rAF loop — sole owner of all viewport-driven DOM mutations.

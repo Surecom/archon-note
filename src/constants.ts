@@ -13,7 +13,7 @@ export const DRAG_THRESHOLD_PX = 5;
 export const NOTE_PADDING = 12;
 
 /** Font-size search bounds (world units; multiplied by zoom for actual CSS px). */
-export const MIN_FIT_FONT_SIZE = 10;
+export const MIN_FIT_FONT_SIZE = 1;
 export const MAX_FIT_FONT_SIZE = 96;
 
 /** Default font for a brand-new note. */
