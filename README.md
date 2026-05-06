@@ -40,8 +40,6 @@ npm run build           # → build/index.js + build/style.css
 npm run package         # → build/archon-note.zip + bumps version
 ```
 
-`deploy` and `deploy:dev` are intentionally **not** in this plugin's `package.json` — the deploy recipe is centralised in `_plugin-deploy/` so consumers reading the plugin source don't see how it gets to the marketplace.
-
 ## How it integrates with the host
 
 `displayMode: 'canvas-overlay'`. The host's `CanvasOverlayPluginHost` (in `client/src/components/`) auto-mounts the plugin into a dedicated `<div>` layered above the canvas (`z-[400]`) as soon as the script loads — no host modal/window. Clicks on the plugin icon (left-palette flyout, view-mode drawer, etc.) dispatch `onIconClick(api)` instead of opening any host UI.
