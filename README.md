@@ -64,4 +64,4 @@ npm run package         # → build/archon-note.zip + bumps version
 
 ## License
 
-MIT (or whatever the surrounding monorepo uses) — code in this folder is original.
+[MIT](LICENSE) © Surecom — code in this folder is original.
