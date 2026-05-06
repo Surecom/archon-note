@@ -9,6 +9,8 @@ import {
   MIN_NOTE_SIZE,
   NOTE_PADDING,
   RESIZE_GRID_OFFSET,
+  RESIZE_HANDLE_HIT_SIZE,
+  RESIZE_HANDLE_VISIBLE_SIZE,
   STYLING_BUTTON_OFFSET,
   STYLING_BUTTON_SIZE,
   TEXT_COMMIT_DEBOUNCE_MS,
@@ -61,9 +63,18 @@ const RESIZE_CURSORS: Record<ResizeEdge, string> = {
   ne: 'nesw-resize', sw: 'nesw-resize', nw: 'nwse-resize', se: 'nwse-resize',
 };
 
-function resizeHandleRect(edge: ResizeEdge, size: number): React.CSSProperties {
-  const half = size / 2;
-  const out = -(RESIZE_GRID_OFFSET + half);
+/**
+ * Position the resize HANDLE'S HIT AREA so the visible circle (centered
+ * inside the hit area via flex) lines up exactly `RESIZE_GRID_OFFSET` outside
+ * the corresponding note edge. `hitSize` here is the OUTER hit area size
+ * (`RESIZE_HANDLE_HIT_SIZE`), not the visible circle size — the visible
+ * circle's center is what we want at `-RESIZE_GRID_OFFSET`, and centering it
+ * inside the hit area means the hit area's top/right/etc. is at
+ * `-(RESIZE_GRID_OFFSET + hitSize / 2)`.
+ */
+function resizeHandleRect(edge: ResizeEdge, hitSize: number): React.CSSProperties {
+  const halfHit = hitSize / 2;
+  const out = -(RESIZE_GRID_OFFSET + halfHit);
   switch (edge) {
     case 'n':  return { top: out, left: '50%', transform: 'translateX(-50%)' };
     case 's':  return { bottom: out, left: '50%', transform: 'translateX(-50%)' };
@@ -159,6 +170,27 @@ const Note: React.FC<Props> = ({
     state,
     popupOpen,
   ]);
+
+  // Mark dirty once web fonts have loaded so the rAF loop re-runs `fitText`
+  // with the correct metrics. Without this, the very first paint sizes text
+  // using fallback-font metrics (Permanent Marker / Caveat are async-loaded
+  // from Google Fonts) and the rendered glyphs end up slightly mis-sized
+  // until the user happens to trigger another change. Critical on mobile
+  // where fonts often haven't finished loading by initial paint.
+  useEffect(() => {
+    if (typeof document === 'undefined' || !('fonts' in document)) return;
+    let cancelled = false;
+    const bump = () => {
+      if (!cancelled) dirtyRef.current = true;
+    };
+    document.fonts.ready.then(bump);
+    // Specifically wait for the two custom faces archon-note bundles via CSS.
+    Promise.allSettled([
+      document.fonts.load('400 16px "Permanent Marker"'),
+      document.fonts.load('400 16px "Caveat"'),
+    ]).then(bump);
+    return () => { cancelled = true; };
+  }, []);
 
   const interactive = !isViewMode && !isDrawingMode;
   const showChrome = (state === 'selected' || state === 'editing') && interactive;
@@ -559,7 +591,6 @@ const Note: React.FC<Props> = ({
 
   const fg = textColorFor(note.bgColor);
   const cssZIndex = state === 'editing' ? Z_NOTE_EDITING : (state === 'selected' ? Z_NOTE_SELECTED : Z_NOTE_BASE);
-  const handlePxSize = 10;
 
   return (
     <>
@@ -587,6 +618,10 @@ const Note: React.FC<Props> = ({
           transition: 'opacity 200ms ease',
           userSelect: state === 'editing' ? 'text' : 'none',
           boxSizing: 'border-box',
+          // `touch-action: none` prevents mobile browsers from interpreting a
+          // touch on the note as a page scroll/zoom gesture — the touch
+          // reaches our pointerdown handler and starts drag instead.
+          touchAction: interactive ? 'none' : 'auto',
         }}
         onPointerDown={(e) => {
           if (!interactive) return;
@@ -672,6 +707,14 @@ const Note: React.FC<Props> = ({
 
         {showChrome && <DeleteButton onClick={() => deleteNote(api, note.id)} />}
 
+        {/*
+          Each resize handle is a transparent hit-area (`RESIZE_HANDLE_HIT_SIZE`,
+          comfortable for finger taps on phones) with the visible blue-bordered
+          circle (`RESIZE_HANDLE_VISIBLE_SIZE`) centered inside via flex. The
+          hit area receives the pointer event; the inner circle is visual only.
+          `touch-action: none` keeps mobile browsers from converting the touch
+          into a scroll gesture mid-drag.
+        */}
         {showChrome && RESIZE_EDGES.map((edge) => (
           <div
             key={edge}
@@ -682,16 +725,31 @@ const Note: React.FC<Props> = ({
             }}
             style={{
               position: 'absolute',
-              width: handlePxSize,
-              height: handlePxSize,
-              background: '#ffffff',
-              border: '1.5px solid #2563eb',
-              borderRadius: '50%',
+              width: RESIZE_HANDLE_HIT_SIZE,
+              height: RESIZE_HANDLE_HIT_SIZE,
               cursor: RESIZE_CURSORS[edge],
-              ...resizeHandleRect(edge, handlePxSize),
+              ...resizeHandleRect(edge, RESIZE_HANDLE_HIT_SIZE),
               pointerEvents: 'auto',
+              touchAction: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'transparent',
             }}
-          />
+          >
+            <span
+              aria-hidden
+              style={{
+                width: RESIZE_HANDLE_VISIBLE_SIZE,
+                height: RESIZE_HANDLE_VISIBLE_SIZE,
+                background: '#ffffff',
+                border: '1.5px solid #2563eb',
+                borderRadius: '50%',
+                pointerEvents: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
         ))}
       </div>
 

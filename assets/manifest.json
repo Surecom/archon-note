@@ -1,8 +1,8 @@
 {
   "id": "archon-note",
   "name": "ArchON Note",
-  "version": "0.1.8",
-  "description": "Sticky notes on the canvas — click the icon to drop a note, drag to move, double-click to edit, pick from a 16-color palette and a serif/sans font toggle.",
+  "version": "0.1.9",
+  "description": "Sticky notes on the canvas — click the icon to drop a note, drag to move, double-click to edit, pick from a 16-color palette and a Sans Serif / Permanent Marker font toggle.",
   "author": "Surecom",
   "icon": "StickyNote",
   "visibility": "public",
@@ -10,12 +10,15 @@
     "project:read",
     "project:write"
   ],
-  "longDescription": "# ArchON Note\n\nLightweight sticky-note layer for the ArchON canvas. Drop notes anywhere on the diagram, drag them around, resize them, pick a background color and a font, write text — all of it persists with the project and participates in global undo/redo.\n\n## Highlights\n\n- **One click = new note.** Press the plugin icon in the toolbar; a note appears in the viewport center.\n- **State machine like a real sticky-note tool.** Single click selects (resize handles + delete + style popover appear). Double-click enters edit mode. Click outside deselects.\n- **16-color palette + serif/sans font toggle.** Choose at any time from the styling popover next to the selected note.\n- **Dynamic font sizing.** The font shrinks/grows automatically to fit the box, no manual sizing required.\n- **First-class persistence.** Notes live in `installedPlugins.archon-note.pluginData` — saved with the project (JSON, Google Drive, localStorage), restored on load.\n- **Full undo/redo.** Every add, delete, move, resize, color change and text edit is reversible via global Cmd+Z.\n- **Respects view mode.** No mutations, drags, or new notes when the project is in view-only mode.\n- **Respects drawing mode.** Notes dim and stop intercepting clicks while you're drawing on the canvas.\n\n## Data shape\n\n```\ninstalledPlugins['archon-note'].pluginData = {\n  notes: { [id]: { id, position, size, text, bgColor, fontFamily } },\n  noteOrder: string[]   // last-on-top z-order\n}\n```\n\nSee `docs/DATA_MODEL.md` inside the plugin for the full schema and migration rules.",
+  "longDescription": "# ArchON Note\n\nLightweight sticky-note layer for the ArchON canvas. Drop notes anywhere on the diagram, drag them around, resize them, pick a background color and a font, write text — all of it persists with the project and participates in global undo/redo.\n\n## Highlights\n\n- **One click on the icon = new note.** A sticky drops in the viewport center; nothing else opens — the plugin lives directly on the canvas.\n- **Miro-like interaction.** Single-click selects (1.5 px blue outline + 8 resize handles + delete X + a small Palette button above the resize grid). Double-click enters edit mode. ESC or click-outside deselects.\n- **Smart styling popup.** Tap the Palette button to open a popover with a 16-color palette + a Sans Serif / Permanent Marker font toggle. The popup is auto-positioned to stay inside the canvas viewport AND avoid covering the note's text — it tries above, below, right, then left of the note.\n- **Dynamic font sizing.** Empty notes get a large prominent caret; as you type, the font shrinks to fit the box. No manual sizing.\n- **Permanent Marker handwritten font.** Loaded asynchronously from Google Fonts with a Caveat fallback for Cyrillic text.\n- **Zero-lag camera follow.** Each note has its own rAF loop that mutates DOM directly via refs — pan and zoom feel as smooth as the canvas itself, with no React re-render lag. Wheel events that land on a note are forwarded to the canvas so panning over a sticky never halts.\n- **Touch / mobile friendly.** All interactive elements declare `touch-action: none` so drag-resize works without breaking through to page-scroll. Resize handles have a 28×28 finger-sized hit area around the visible 10×10 circle; the delete X has a 32×32 hit area around its 20×20 visible button.\n- **Delete / Backspace shortcut.** When a note is selected, pressing Delete or Backspace deletes it (skipped while focus is in any input).\n- **First-class persistence.** Notes live in `installedPlugins['archon-note'].pluginData` — saved with the project (JSON, Google Drive, localStorage), restored on load.\n- **Full undo/redo.** Every add, delete, move, resize, color change and text edit is reversible via global Cmd+Z (the plugin uses `applyPluginDataDelta`, not `setPluginData`, so changes participate in the host's history stack).\n- **Respects view mode.** No mutations, drags, or new notes when the project is in view-only mode.\n- **Respects drawing mode.** Notes dim to opacity 0.55 and stop intercepting pointer events while you're drawing on the canvas.\n\n## Data shape\n\n```\ninstalledPlugins['archon-note'].pluginData = {\n  notes: { [id]: { id, position, size, text, bgColor, fontFamily } },\n  noteOrder: string[]   // last-on-top z-order\n}\n```\n\n`fontFamily` is `'sans' | 'marker'`. Legacy `'serif'` from older builds is migrated to `'marker'` on read. See `docs/DATA_MODEL.md` inside the plugin for the full schema and migration rules.",
   "tags": [
     "notes",
     "sticky",
     "annotation",
-    "canvas-overlay"
+    "canvas-overlay",
+    "miro-style",
+    "handwritten",
+    "permanent-marker"
   ],
   "screenshots": [],
   "videos": []

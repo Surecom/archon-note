@@ -1,6 +1,6 @@
 {
   "name": "archon-note",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "description": "ArchON Note — Miro-style sticky notes overlay for the canvas. Authored from scratch as a public plugin; data persists inside the project's installedPlugins.pluginData.",
   "scripts": {

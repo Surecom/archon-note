@@ -154,6 +154,42 @@ A note has `pointer-events: auto` so drag/click works. Without intervention this
 
 `onIconClick` uses `viewportCenterWorld(vp)` to drop new notes at the visible center.
 
+## Mobile / touch support
+
+The plugin uses `PointerEvent` (`onPointerDown`, `pointermove`, `pointerup`) which natively handles mouse, touch, and pen — no separate touch-event branch is needed. Two device-specific concerns are addressed explicitly:
+
+### Touch action
+
+Mobile browsers default to interpreting a touch + drag on any element as a page-scroll / pinch-zoom gesture, which silently steals the `pointermove` events from our drag handler. Every interactive surface in archon-note sets `touch-action: none` to opt out:
+
+| Element | Why |
+|---|---|
+| Note root (when `interactive`) | drag-to-move uses `pointermove` |
+| Resize handle hit-area | drag-to-resize uses `pointermove` |
+| Delete button | tap to delete |
+| Styling button | tap to open popup |
+| Styling popup | tap to pick color / font |
+
+When the note is in view-mode or drawing-mode, `touchAction` reverts to `auto` on the root so touches pass through to the canvas naturally.
+
+### Hit targets
+
+Visible chrome stays small (Miro-like, fits compact notes), but each interactive element has an enlarged transparent hit-area for fingers:
+
+| Element | Hit area | Visible |
+|---|---|---|
+| Resize handle | `RESIZE_HANDLE_HIT_SIZE = 28 × 28` CSS px | `RESIZE_HANDLE_VISIBLE_SIZE = 10 × 10` |
+| Delete button | `DELETE_BUTTON_HIT_SIZE = 32 × 32` | `DELETE_BUTTON_VISIBLE_SIZE = 20 × 20` |
+| Styling button | `STYLING_BUTTON_SIZE = 28 × 28` (no separate hit area — visible IS the target) | same |
+
+The pattern: the outer hit-area receives the pointer event; the inner visual element has `pointer-events: none` so taps on the transparent padding still go to the outer wrapper.
+
+### Async font loading
+
+`fitText` measures text via canvas-2d `measureText`, which uses the **currently loaded font**. `Permanent Marker` (and its `Caveat` cyrillic fallback) load asynchronously from Google Fonts — on the very first paint, especially on mobile, the canvas measures with the system fallback's metrics while the actual rendered text uses the just-arrived custom font. Result: noticeably mis-sized glyphs until the next render trigger.
+
+Each `Note` waits for `document.fonts.ready` AND specifically `document.fonts.load('400 16px "Permanent Marker"')` / `document.fonts.load('400 16px "Caveat"')`, then bumps `dirtyRef.current = true`. The next rAF tick re-runs `fitText` with correct metrics and applies the right `fontSize` / textarea height. From the user's perspective the text "snaps" once to its final size as soon as the fonts finish downloading — typically within the first second on a fresh load, instant on subsequent loads (HTTP cache).
+
 ## Dynamic font sizing (`utils/fitText.ts`)
 
 Binary search the integer range `[MIN_FIT_FONT_SIZE, MAX_FIT_FONT_SIZE]`. For each candidate, build a CSS font string from `FONT_STACKS` + `FONT_WEIGHT` + `FONT_STYLE`, set it on a singleton offscreen canvas-2d context, wrap text into the inner box (`size - 2*NOTE_PADDING`) using greedy word-wrap, sum line heights with `LINE_HEIGHT_MULTIPLIER = 1.2`. The largest font that doesn't overflow `innerHeight` wins.

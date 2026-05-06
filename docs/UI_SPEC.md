@@ -48,23 +48,26 @@ Migration: legacy notes with `fontFamily: 'serif'` (older plugin versions) are m
 
 ## Resize handles
 
-8 SVG-style circles drawn as positioned `<div>`s with `border-radius: 50%`:
-- `width/height`: 10 px (CSS, fixed — does not scale with zoom).
-- `background`: `#ffffff`.
-- `border`: 1.5 px solid `#2563eb`.
-- Cursor matches edge: `ns-resize`, `ew-resize`, `nesw-resize`, `nwse-resize`.
-- Anchored 15 px (`RESIZE_GRID_OFFSET`) **outside** every note edge — handle centers sit at `-RESIZE_GRID_OFFSET` and `note + RESIZE_GRID_OFFSET` on each axis, which makes the visible resize grid `2 * RESIZE_GRID_OFFSET = 30` CSS px wider AND taller than the note. Edge midpoints are `translateX/Y -50%`-centered along the matching axis.
+Two-layer design: each handle is a transparent **hit-area** (`RESIZE_HANDLE_HIT_SIZE = 28` CSS px) with a visible blue-bordered **circle** (`RESIZE_HANDLE_VISIBLE_SIZE = 10` CSS px) centered inside via flex. The hit area is what receives the pointer event; the inner circle is visual only.
+
+- **Hit area**: 28 × 28 CSS px (mobile-friendly — comfortable finger tap target).
+  - `position: absolute`, `pointer-events: auto`, `touch-action: none`, `cursor: <ns/ew/nesw/nwse>-resize`.
+  - `data-archon-note-handle="<edge>"` so click-outside / `Note.tsx` body handler can ignore taps inside.
+  - Anchored so the **inner circle's center** sits 15 px (`RESIZE_GRID_OFFSET`) outside every note edge: hit-area top/right/etc. = `-(RESIZE_GRID_OFFSET + RESIZE_HANDLE_HIT_SIZE / 2) = -29` CSS px. Edge midpoints are `translateX/Y -50%`-centered along the matching axis.
+  - Total visible resize grid = note + `2 * RESIZE_GRID_OFFSET = 30` CSS px on each axis.
+- **Visible circle**: 10 × 10 CSS px, `#ffffff` fill, 1.5 px solid `#2563eb` border, fixed pixel size (does not scale with zoom).
 - Visible only in `selected` / `editing` and only when `interactive`.
-- `data-archon-note-handle="<edge>"` so click-outside / `Note.tsx` body handler can ignore them.
+
+The 28 × 28 NE hit area overlaps the 32 × 32 delete button hit area at the top-right corner. `Z_DELETE_BUTTON = 11` is higher than the handle's z-index (none = auto = 0), so taps in the overlap go to the delete button. The user can still grab the NE handle from its top-right corner outside the overlap.
 
 ## Delete button (`DeleteButton.tsx`)
 
-- **Position**: `top: -10 px; right: -10 px;` of the note root — TOP-RIGHT corner, center of the button sits exactly on the note's NE corner (half inside, half outside).
-- **Size**: 20 × 20 px.
-- **Background**: `#ef4444` (red-500), white border 2 px, white `X` icon (Lucide `X`, size 12, strokeWidth 3).
-- **Shadow**: `0 2px 6px rgba(0,0,0,0.25)`.
-- **Visible only in** `selected` / `editing`.
-- **z-index**: explicit `Z_DELETE_BUTTON = 11` so it renders ABOVE the NE resize handle (which sits 15 px further outside the note thanks to `RESIZE_GRID_OFFSET`).
+Two-layer design (same pattern as resize handles): transparent hit-area button with the visible red circle centered inside.
+
+- **Hit area**: `DELETE_BUTTON_HIT_SIZE = 32 × 32` CSS px transparent `<button>`. `touch-action: none`, `pointer-events: auto`, explicit `Z_DELETE_BUTTON = 11`. Anchored so its center sits exactly on the note's NE corner: `top: -16; right: -16;`.
+- **Visible circle**: `DELETE_BUTTON_VISIBLE_SIZE = 20 × 20` CSS px, `#ef4444` (red-500), white border 2 px, white `X` icon (Lucide `X`, size 12, strokeWidth 3), shadow `0 2px 6px rgba(0,0,0,0.25)`.
+- Visible only in `selected` / `editing`.
+- **z-index**: `Z_DELETE_BUTTON = 11` ensures the button renders ABOVE the overlapping NE resize handle. Taps in the overlap go to delete; the user grabs the NE handle from its top-right tip outside the overlap.
 - `data-archon-note-delete` so click-outside doesn't deselect when clicking it.
 
 ## Styling button (`StylingButton.tsx`)

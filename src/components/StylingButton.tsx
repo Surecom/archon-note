@@ -36,6 +36,7 @@ const StylingButton: React.FC<Props> = ({ onClick }) => {
         cursor: 'pointer',
         padding: 0,
         pointerEvents: 'auto',
+        touchAction: 'none',
       }}
       aria-label="Open note styling"
       title="Styling"

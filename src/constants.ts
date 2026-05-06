@@ -65,6 +65,24 @@ export const Z_DELETE_BUTTON = 11;
  */
 export const RESIZE_GRID_OFFSET = 15;
 
+// ---------- Mobile-friendly touch targets ----------
+
+/**
+ * Hit-area size (CSS px) for each resize handle. The visible circle is
+ * `RESIZE_HANDLE_VISIBLE_SIZE` and is centered inside this larger transparent
+ * area so touch users have a comfortable target (≥28 CSS px is the practical
+ * minimum on phones — Apple HIG recommends 44 but that's too big visually).
+ */
+export const RESIZE_HANDLE_HIT_SIZE = 28;
+export const RESIZE_HANDLE_VISIBLE_SIZE = 10;
+
+/**
+ * Same idea for the delete X button: 32×32 transparent hit area with a
+ * 20×20 visible red circle centered inside.
+ */
+export const DELETE_BUTTON_HIT_SIZE = 32;
+export const DELETE_BUTTON_VISIBLE_SIZE = 20;
+
 // ---------- Styling popup geometry (CSS px, fixed) ----------
 
 /** Estimated popup outer width in CSS px (4×4 color grid + Aa toggle). */
