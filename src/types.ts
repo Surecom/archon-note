@@ -64,6 +64,11 @@ export interface ArchonPluginAPI {
   subscribeToViewMode?(cb: () => void): () => void;
   getIsDrawingMode?(): boolean;
   subscribeToDrawingMode?(cb: () => void): () => void;
+  // Canvas-overlay helper API (host >= 2026-05-06). Plugins must keep a
+  // fallback for older hosts.
+  getCanvasElement?(): HTMLCanvasElement | null;
+  attachCanvasWheelForwarding?(element: HTMLElement): () => void;
+  subscribeToViewportFrame?(cb: (vp: ViewportSnapshot) => void): () => void;
 }
 
 export interface ArchonPlugin {

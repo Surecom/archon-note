@@ -21,13 +21,18 @@ archon-note is a `displayMode: 'canvas-overlay'` plugin. The host MUST provide:
 | `showNotification(msg, type)` | View-mode warning when icon clicked |
 | `getPluginData()` | Read current notes on every render |
 | `applyPluginDataDelta(delta, label)` | Persist all mutations (undo-able) |
-| `getViewport()` | World ⇄ screen projection; viewport-center for new note |
-| `subscribeToViewport(cb)` | Re-render on pan / zoom / canvas resize |
+| `getViewport()` | World ⇄ screen projection; viewport-center for new note; rAF fallback |
+| `subscribeToViewport(cb)` | (unused — see `subscribeToViewportFrame` below) |
 | `subscribeToProjectChanges(cb)` | Re-render on undo/redo and external mutations |
 | `getIsViewMode()` | Disable mutations and pointer events when true |
 | `subscribeToViewMode(cb)` | React to view-mode toggle |
 | `getIsDrawingMode()` | Dim overlay + disable interaction when true |
 | `subscribeToDrawingMode(cb)` | React to drawing-mode toggle |
+| `subscribeToViewportFrame(cb)` ⭐ | Per-frame viewport tick — drives the per-Note DOM-mutation pass for zero-lag camera follow + drag/resize transient state. Falls back to a per-Note `requestAnimationFrame` loop on older hosts. |
+| `attachCanvasWheelForwarding(el)` ⭐ | Wheel re-dispatch onto host `<canvas>` so panning continues over notes / styling button / styling popup. Falls back to a plugin-local helper that uses `document.querySelector('main canvas')` on older hosts. |
+| `getCanvasElement()` ⭐ | Used inside the wheel-forwarding fallback when the host predates `attachCanvasWheelForwarding` but already exposes `getCanvasElement`. |
+
+⭐ = canvas-overlay helper API added in host >= 2026-05-06. Plugins built against it must keep a fallback for older hosts (archon-note does — see `attachWheelForwarding(api, el)` and the `if (api.subscribeToViewportFrame) … else { requestAnimationFrame loop }` branch in `Note.tsx`).
 
 archon-note **does NOT** use `applyMcpOperations`, `exportLayerAsPNG`, `exportScenarioAsVideo`, `exportSystemContainerDiagram`, `checkVoicingAvailable`, `getWindowHeaderContainer`, `setWindowMinimized`. They are floating-window or modal concerns.
 

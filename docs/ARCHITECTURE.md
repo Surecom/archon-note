@@ -132,13 +132,15 @@ Earlier the plugin used React state for viewport (`setViewport(readViewport(api)
 The current architecture eliminates that lag entirely:
 
 1. **No viewport React state.** `NotesOverlay` does NOT subscribe to viewport. It only subscribes to project / view-mode / drawing-mode changes, which trigger re-renders for chrome visibility, mounting/unmounting, etc.
-2. **Each `Note` runs its own rAF loop.** Inside the loop:
-   - Reads the current viewport synchronously via `api.getViewport()`.
-   - Computes screen position with the latest `noteRef.current` (mirror of `note` prop) and any transient `sessionRef` state from an in-progress drag/resize.
+2. **Each `Note` runs an `applyFrame(vp)` callback every animation frame.** Inside it:
+   - Reads the latest `noteRef.current` (mirror of `note` prop) and any transient `sessionRef` state from an in-progress drag/resize.
+   - Computes screen position from `vp` (synchronously matching the canvas's current viewport).
    - Applies `transform: translate3d(...)`, `width`, `height`, `padding`, `font-size` directly to DOM via refs (`rootRef`, `textBodyRef`, `stylingBtnContainerRef`, `popupContainerRef`, `textareaRef`).
-3. **All rAF callbacks for one frame run together** — canvas, drawing layer, and notes — before the browser paints. The note's transform reaches the compositor in the same frame as the canvas's render. **Zero perceptible lag.**
-4. **Skip-if-unchanged inside the loop.** The closure tracks `lastZoom` / `lastOx` / `lastOy` and only mutates DOM when viewport changed (or a drag/resize session is active). 60fps cycles cost ~one comparison and a function call when nothing changed.
-5. **GPU-accelerated movement.** Position is applied via `transform` + `willChange: 'transform'` so panning doesn't trigger layout — only compositor recomposites.
+3. **The frame loop is owned by the host (`api.subscribeToViewportFrame(cb)`).** A SINGLE shared `requestAnimationFrame` loop in the host fans out to every subscriber across every canvas-overlay plugin — so 50 notes pay the cost of one rAF callback, not 50. The loop auto-stops when there are no subscribers and auto-starts on the next subscription.
+4. **Fallback for older hosts.** If `api.subscribeToViewportFrame` is missing, each `Note` runs its own per-instance `requestAnimationFrame` loop and reads `api.getViewport()` itself. Same behaviour, slightly worse perf at scale.
+5. **All rAF callbacks for one frame run together** — canvas, drawing layer, and the host's overlay-frame loop — before the browser paints. The note's transform reaches the compositor in the same frame as the canvas's render. **Zero perceptible lag.**
+6. **Skip-if-unchanged inside `applyFrame`.** The closure tracks `lastZoom` / `lastOx` / `lastOy` / `lastTransient` / `dirtyRef` and only mutates DOM when viewport changed (or a drag/resize session is active, or a React-driven dirty flag is set). 60fps idle cycles cost ~one comparison + function call.
+7. **GPU-accelerated movement.** Position is applied via `transform` + `willChange: 'transform'` so panning doesn't trigger layout — only compositor recomposites.
 
 ### Drag / resize during pan
 
@@ -152,9 +154,14 @@ To avoid a one-frame flash from `translate3d(0,0,0)` before the first rAF tick, 
 
 Every `pointer-events: auto` surface owned by a note (root, styling button container, styling popup container) acts as a wheel sink — without intervention, the moment the cursor crosses any of them the canvas's wheel listener stops firing and panning halts.
 
-Each `Note` attaches a non-passive `wheel` listener (`{ passive: false }`) to ALL THREE of those refs (`rootRef`, `stylingBtnContainerRef`, `popupContainerRef`) and re-dispatches a fresh `WheelEvent` on the host's `<canvas>` element via the shared `forwardWheelToCanvas(e)` helper. The host's `useCanvasCamera` wheel listener fires as if the wheel had landed on the canvas; `e.preventDefault()` blocks the browser's default scroll. Synthetic events are untrusted (`isTrusted: false`) but the host's listener only reads `delta*` / `client*` / modifier keys — all of which we forward verbatim.
+Each `Note` calls `attachWheelForwarding(api, element)` for ALL THREE refs (`rootRef`, `stylingBtnContainerRef`, `popupContainerRef`). That helper:
 
-Listener attachment for the styling button + popup containers re-runs on `[showChrome, popupOpen]` so the listener is always bound to the live DOM node (both containers are conditionally mounted).
+1. Prefers `api.attachCanvasWheelForwarding(element)` from the host (added in host >= 2026-05-06). The host owns the canvas-element lookup and the wheel re-dispatch — plugins never reach into the host DOM with `document.querySelector` themselves.
+2. Falls back to a plugin-local non-passive `{ passive: false }` `wheel` listener that finds the canvas via `api.getCanvasElement()` (also new) or, last resort, `document.querySelector('main canvas')`. The fallback is used on older hosts.
+
+In both branches the dispatched event is a synthetic `WheelEvent` with `delta*` / `client*` / `screen*` / modifier keys forwarded verbatim. Synthetic events are untrusted (`isTrusted: false`) but the host's listener only reads those properties.
+
+Listener attachment for the styling button + popup containers re-runs on `[api, showChrome, popupOpen]` so the listener is always bound to the live DOM node (both containers are conditionally mounted).
 
 `onIconClick` uses `viewportCenterWorld(vp)` to drop new notes at the visible center.
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArchonNote, ArchonPluginAPI } from '../types';
+import { ArchonNote, ArchonPluginAPI, ViewportSnapshot } from '../types';
 import { textColorFor } from '../colors';
 import {
   DRAG_THRESHOLD_PX,
@@ -88,36 +88,42 @@ function resizeHandleRect(edge: ResizeEdge, hitSize: number): React.CSSPropertie
 }
 
 /**
- * Re-dispatch a wheel event onto the host's <canvas> so panning continues
- * smoothly when the cursor is over a note, the styling button or the styling
- * popup. Without this, every pointer-events:auto element above the canvas
- * acts as a wheel sink and pan halts. Browsers treat synthetic events as
- * untrusted but the host's wheel listener doesn't check `isTrusted` — it
- * only reads delta / client coordinates, which we forward verbatim.
+ * Attach a wheel-forwarding listener to `element`. Prefers the host's
+ * `api.attachCanvasWheelForwarding(element)` when available (host >= 2026-05-06);
+ * falls back to a plugin-local implementation that locates the canvas via
+ * `document.querySelector('main canvas')` for older hosts.
  *
- * Used as the listener body for non-passive `wheel` event subscriptions.
+ * Returns the unsubscribe function in both branches.
  */
-function forwardWheelToCanvas(e: WheelEvent): void {
-  const canvas = document.querySelector('main canvas') as HTMLCanvasElement | null;
-  if (!canvas) return;
-  e.preventDefault();
-  e.stopPropagation();
-  canvas.dispatchEvent(new WheelEvent('wheel', {
-    bubbles: true,
-    cancelable: true,
-    deltaX: e.deltaX,
-    deltaY: e.deltaY,
-    deltaZ: e.deltaZ,
-    deltaMode: e.deltaMode,
-    clientX: e.clientX,
-    clientY: e.clientY,
-    screenX: e.screenX,
-    screenY: e.screenY,
-    ctrlKey: e.ctrlKey,
-    shiftKey: e.shiftKey,
-    altKey: e.altKey,
-    metaKey: e.metaKey,
-  }));
+function attachWheelForwarding(api: ArchonPluginAPI, element: HTMLElement): () => void {
+  if (api.attachCanvasWheelForwarding) {
+    return api.attachCanvasWheelForwarding(element);
+  }
+  // Fallback: replicate the host helper locally for older hosts.
+  const handler = (e: WheelEvent) => {
+    const canvas = (api.getCanvasElement?.() ?? document.querySelector('main canvas')) as HTMLCanvasElement | null;
+    if (!canvas) return;
+    e.preventDefault();
+    e.stopPropagation();
+    canvas.dispatchEvent(new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaX: e.deltaX,
+      deltaY: e.deltaY,
+      deltaZ: e.deltaZ,
+      deltaMode: e.deltaMode,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      screenX: e.screenX,
+      screenY: e.screenY,
+      ctrlKey: e.ctrlKey,
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      metaKey: e.metaKey,
+    }));
+  };
+  element.addEventListener('wheel', handler, { passive: false });
+  return () => element.removeEventListener('wheel', handler);
 }
 
 function applyResize(
@@ -471,47 +477,43 @@ const Note: React.FC<Props> = ({
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    root.addEventListener('wheel', forwardWheelToCanvas, { passive: false });
-    return () => root.removeEventListener('wheel', forwardWheelToCanvas);
-  }, []);
+    return attachWheelForwarding(api, root);
+  }, [api]);
 
   useEffect(() => {
     const el = stylingBtnContainerRef.current;
     if (!el) return;
-    el.addEventListener('wheel', forwardWheelToCanvas, { passive: false });
-    return () => el.removeEventListener('wheel', forwardWheelToCanvas);
-  }, [showChrome, popupOpen]);
+    return attachWheelForwarding(api, el);
+  }, [api, showChrome, popupOpen]);
 
   useEffect(() => {
     const el = popupContainerRef.current;
     if (!el) return;
-    el.addEventListener('wheel', forwardWheelToCanvas, { passive: false });
-    return () => el.removeEventListener('wheel', forwardWheelToCanvas);
-  }, [showChrome, popupOpen]);
+    return attachWheelForwarding(api, el);
+  }, [api, showChrome, popupOpen]);
 
   // ------------------------------------------------------------------
-  // The rAF loop — sole owner of all viewport-driven DOM mutations.
-  // Reads the latest viewport via api.getViewport() each frame (synchronous,
-  // matches the canvas's currentOffsetRef-driven render loop), so notes
-  // update IN THE SAME FRAME as the canvas. Zero lag, zero React re-renders
-  // for camera changes.
+  // Per-frame DOM apply — sole owner of all viewport-driven DOM mutations.
+  // Reads viewport synchronously, applies transform/width/height/padding/
+  // font-size to refs. So long as it runs every animation frame in lock-step
+  // with the canvas's render loop, notes update in the SAME frame as the
+  // canvas. Zero lag, zero React re-renders for camera changes.
+  //
+  // Driven by `api.subscribeToViewportFrame` (host >= 2026-05-06) which uses
+  // a SHARED single-rAF loop across all canvas-overlay plugins. Falls back
+  // to a per-Note rAF for older hosts.
   // ------------------------------------------------------------------
 
   useEffect(() => {
-    let raf = 0;
     let lastZoom = -1;
     let lastOx = NaN;
     let lastOy = NaN;
     let lastTransient = false;
-    let lastTaText = '\0'; // sentinel that won't match any real text
+    let lastTaText = '\0';
     let lastTaFsCss = -1;
     let lastTaCapH = -1;
 
-    const tick = () => {
-      raf = requestAnimationFrame(tick);
-      const vp = api.getViewport?.();
-      if (!vp) return;
-
+    const applyFrame = (vp: ViewportSnapshot) => {
       const session = sessionRef.current;
       const isTransient = !!session && (session.mode === 'drag' || session.mode === 'resize');
       const viewportChanged = vp.zoom !== lastZoom || vp.offset.x !== lastOx || vp.offset.y !== lastOy;
@@ -587,6 +589,19 @@ const Note: React.FC<Props> = ({
         );
         pc.style.transform = `translate3d(${coords.x}px, ${coords.y}px, 0)`;
       }
+    };
+
+    // Prefer the host's shared frame subscription (single rAF for all plugins
+    // and all overlay elements); fall back to a per-Note rAF on older hosts.
+    if (api.subscribeToViewportFrame) {
+      return api.subscribeToViewportFrame(applyFrame);
+    }
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const vp = api.getViewport?.();
+      if (!vp) return;
+      applyFrame(vp);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
