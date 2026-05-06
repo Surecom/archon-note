@@ -1,0 +1,42 @@
+/*
+ * archon-note — fonts
+ *
+ * Loaded by src/index.tsx via `import './fonts.css'`. Vite bundles it into
+ * style.css, the host injects it on plugin load. Both stacks include cyrillic
+ * + latin subsets so Russian text renders correctly.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap&subset=cyrillic,latin');
+@import url('https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@1,400;1,700&display=swap&subset=cyrillic,latin');
+
+/*
+ * Note-specific resets. Every interactive element inside the overlay gets a
+ * 'data-archon-note' attribute so this scope can never leak into the host UI.
+ */
+[data-archon-note] *,
+[data-archon-note] {
+  box-sizing: border-box;
+}
+
+[data-archon-note-textarea] {
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.2;
+  color: inherit;
+  text-align: center;
+  overflow: hidden;
+  caret-color: currentColor;
+}
+
+[data-archon-note-textarea]::placeholder {
+  color: currentColor;
+  opacity: 0.45;
+}

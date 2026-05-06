@@ -1,0 +1,22 @@
+{
+  "id": "archon-note",
+  "name": "ArchON Note",
+  "version": "0.1.0",
+  "description": "Sticky notes on the canvas — click the icon to drop a note, drag to move, double-click to edit, pick from a 16-color palette and a serif/sans font toggle.",
+  "author": "Surecom",
+  "icon": "StickyNote",
+  "visibility": "public",
+  "permissions": [
+    "project:read",
+    "project:write"
+  ],
+  "longDescription": "# ArchON Note\n\nLightweight sticky-note layer for the ArchON canvas. Drop notes anywhere on the diagram, drag them around, resize them, pick a background color and a font, write text — all of it persists with the project and participates in global undo/redo.\n\n## Highlights\n\n- **One click = new note.** Press the plugin icon in the toolbar; a note appears in the viewport center.\n- **State machine like a real sticky-note tool.** Single click selects (resize handles + delete + style popover appear). Double-click enters edit mode. Click outside deselects.\n- **16-color palette + serif/sans font toggle.** Choose at any time from the styling popover next to the selected note.\n- **Dynamic font sizing.** The font shrinks/grows automatically to fit the box, no manual sizing required.\n- **First-class persistence.** Notes live in `installedPlugins.archon-note.pluginData` — saved with the project (JSON, Google Drive, localStorage), restored on load.\n- **Full undo/redo.** Every add, delete, move, resize, color change and text edit is reversible via global Cmd+Z.\n- **Respects view mode.** No mutations, drags, or new notes when the project is in view-only mode.\n- **Respects drawing mode.** Notes dim and stop intercepting clicks while you're drawing on the canvas.\n\n## Data shape\n\n```\ninstalledPlugins['archon-note'].pluginData = {\n  notes: { [id]: { id, position, size, text, bgColor, fontFamily } },\n  noteOrder: string[]   // last-on-top z-order\n}\n```\n\nSee `docs/DATA_MODEL.md` inside the plugin for the full schema and migration rules.",
+  "tags": [
+    "notes",
+    "sticky",
+    "annotation",
+    "canvas-overlay"
+  ],
+  "screenshots": [],
+  "videos": []
+}

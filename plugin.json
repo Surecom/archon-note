@@ -1,0 +1,15 @@
+{
+  "id": "archon-note",
+  "name": "Archon Note",
+  "version": "0.1.0",
+  "description": "Sticky notes on the canvas. Click the icon to drop a note in the viewport center; double-click to edit; click once to select & resize.",
+  "author": "Surecom",
+  "icon": "StickyNote",
+  "main": "index.js",
+  "style": "style.css",
+  "visibility": "public",
+  "permissions": [
+    "project:read",
+    "project:write"
+  ]
+}
