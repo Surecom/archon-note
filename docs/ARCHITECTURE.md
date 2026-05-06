@@ -55,11 +55,32 @@ idle ──single click──▶ selected ──double click──▶ editing
                                              (and commit text)
 ```
 
-| State    | Visible UI                                                | Pointer behavior                          |
-|----------|-----------------------------------------------------------|-------------------------------------------|
-| idle     | sticky body + text                                        | hover = grab cursor; pointerdown starts click-or-drag |
-| selected | + 1.5px blue border + 8 resize handles + delete X + popup | drag body = move; drag handle = resize; double-click → editing |
-| editing  | + textarea focused, pre-filled with current text          | textarea owns pointer events; ESC → selected; click-outside commits + → idle |
+| State    | Visible UI                                                                | Pointer behavior                          |
+|----------|---------------------------------------------------------------------------|-------------------------------------------|
+| idle     | sticky body + text                                                        | hover = grab cursor; pointerdown starts click-or-drag |
+| selected | + 1.5px blue border + 8 resize handles + delete X + small Palette button (above the resize grid) | drag body = move; drag handle = resize; click Palette → toggle styling popup; double-click → editing |
+| editing  | + textarea focused, pre-filled with current text                          | textarea owns pointer events; ESC → selected; click-outside commits + → idle |
+
+### Styling popup vs styling button
+
+The popup that contains the 16-color grid + the Sans/Marker font toggle is **NOT** auto-shown on selection. Instead a small `<StylingButton>` (Palette icon, 28×28 white pill with shadow) appears above the note's top edge by `STYLING_BUTTON_OFFSET = 36` CSS px — past the resize handles. Clicking the button calls `onTogglePopup(id)` on `NotesOverlay`, which flips `selection.popupOpen`.
+
+When the popup is open:
+- the `<StylingButton>` is hidden (the popup IS the button's open state),
+- clicking the note body closes the popup but keeps selection (`onClosePopup`),
+- clicking outside both popup and note deselects entirely (existing click-outside handler).
+
+`selection.popupOpen` is per-selection state owned by `NotesOverlay` — switching to a different note resets it to `false`; re-selecting the same note (e.g. after a drag commit) preserves it so the popup doesn't blink shut mid-interaction.
+
+### Smart popup positioning (`utils/popupPosition.ts`)
+
+The popup is rendered as a **sibling** of the note in the React tree (not nested inside the note's div), so it lives in overlay-container CSS-pixel coordinates and can be placed anywhere. `computePopupPosition(noteScreenRect, viewportSize, popupSize, margin)` runs three passes:
+
+1. **In viewport AND no overlap with the note** — try candidates in order: above → below → right → left.
+2. **In viewport** (overlap allowed) — same order, fallback when no non-overlapping candidate fits (very small viewports).
+3. **Clamp** the "above" candidate to viewport bounds — last resort, popup is at least visible and clickable.
+
+This guarantees the popup is always inside the canvas viewport and prefers placements that keep the note's text readable.
 
 ### Single-click vs drag (the Miro-like dispatch)
 
@@ -82,13 +103,20 @@ This means **moving a note never produces a half-undone state** — every drag i
 
 8 SVG-circle handles (`'n','s','e','w','ne','nw','se','sw'`). Pointer events on handles `stopPropagation` so the body's click-or-drag doesn't fire. `applyResize(edge, origPos, origSize, dxWorld, dyWorld)` adjusts position when the dragged edge is `'n'` or `'w'` so the opposite edge stays anchored. Min size enforced via `MIN_NOTE_SIZE` from `constants.ts`.
 
-### Click-outside / ESC
+### Click-outside / ESC / Delete
 
 Mounted in `Note.tsx` via `document.addEventListener('pointerdown', handler, true)` (capture phase). Skipped if the click landed in: this note's root, a styling popup (`[data-archon-note-popup]`), or a delete button (`[data-archon-note-delete]`). On a real outside click: flush text, then `onRequestDeselect()`.
 
-ESC: in `editing` → flush + go to `selected`; in `selected` → go to `idle`.
+Keyboard shortcuts (window-level keydown, gated by `state !== 'idle'`):
 
-## Viewport math
+| Key | In `selected` | In `editing` |
+|-----|---------------|--------------|
+| `Escape` | Deselect (`onRequestDeselect`) | Flush text + back to selected (`onRequestSelect`) |
+| `Delete` / `Backspace` | **Delete the note** (`deleteNote(api, note.id)`) | Falls through to the textarea so the user can erase characters |
+
+The Delete/Backspace path early-returns if `document.activeElement` is an `<input>`, `<textarea>` or contentEditable — so typing in the host's right panel never accidentally deletes a sticky note. After delete, `NotesOverlay`'s "drop selection if its note disappears" effect auto-clears the selection.
+
+## Viewport math + zero-lag camera follow
 
 All coords inside the plugin are **world** units, matching the host's canvas coordinate system. Conversion lives in `store/viewport.ts`:
 
@@ -97,15 +125,56 @@ screen.x = (world.x + offset.x) * zoom
 screen.y = (world.y + offset.y) * zoom
 ```
 
-`Note.tsx` re-projects on every render using the latest viewport snapshot from `NotesOverlay`. Viewport snapshot is refreshed via `api.subscribeToViewport(refresh)` so panning, zooming, and overlay-resizing all trigger re-render.
+### Why notes stay in lock-step with the canvas
+
+Earlier the plugin used React state for viewport (`setViewport(readViewport(api))` from a `subscribeToViewport` callback). That approach had ~1 frame of lag behind the canvas (Redux update → React state update → re-render → useLayoutEffect → DOM mutation). Visible as "notes drag behind canvas during panning".
+
+The current architecture eliminates that lag entirely:
+
+1. **No viewport React state.** `NotesOverlay` does NOT subscribe to viewport. It only subscribes to project / view-mode / drawing-mode changes, which trigger re-renders for chrome visibility, mounting/unmounting, etc.
+2. **Each `Note` runs its own rAF loop.** Inside the loop:
+   - Reads the current viewport synchronously via `api.getViewport()`.
+   - Computes screen position with the latest `noteRef.current` (mirror of `note` prop) and any transient `sessionRef` state from an in-progress drag/resize.
+   - Applies `transform: translate3d(...)`, `width`, `height`, `padding`, `font-size` directly to DOM via refs (`rootRef`, `textBodyRef`, `stylingBtnContainerRef`, `popupContainerRef`, `textareaRef`).
+3. **All rAF callbacks for one frame run together** — canvas, drawing layer, and notes — before the browser paints. The note's transform reaches the compositor in the same frame as the canvas's render. **Zero perceptible lag.**
+4. **Skip-if-unchanged inside the loop.** The closure tracks `lastZoom` / `lastOx` / `lastOy` and only mutates DOM when viewport changed (or a drag/resize session is active). 60fps cycles cost ~one comparison and a function call when nothing changed.
+5. **GPU-accelerated movement.** Position is applied via `transform` + `willChange: 'transform'` so panning doesn't trigger layout — only compositor recomposites.
+
+### Drag / resize during pan
+
+Pointer handlers also use `readViewport(api)` directly (no `viewport` prop) — the world-space delta is always computed against the current camera. Drag mutations live in `sessionRef`; the rAF loop reads them directly without React state churn.
+
+### Initial transform on mount
+
+To avoid a one-frame flash from `translate3d(0,0,0)` before the first rAF tick, the React render computes an `initSx/initSy/initSw/initSh/initFsCss` from `readViewport(api)` and applies them inline. The rAF loop overwrites within the next frame.
+
+### Wheel forwarding
+
+A note has `pointer-events: auto` so drag/click works. Without intervention this means wheel events that land on the note never reach the canvas — and panning halts the moment the cursor enters a note. Each `Note` attaches a non-passive `wheel` listener (`{ passive: false }`) on its root and re-dispatches a fresh `WheelEvent` on the host's `<canvas>` element. The host's `useCanvasCamera` wheel listener fires as if the wheel had landed on the canvas. `e.preventDefault()` blocks the browser's default scroll.
 
 `onIconClick` uses `viewportCenterWorld(vp)` to drop new notes at the visible center.
 
 ## Dynamic font sizing (`utils/fitText.ts`)
 
-Binary search the integer range `[MIN_FIT_FONT_SIZE, MAX_FIT_FONT_SIZE]`. For each candidate, build a CSS font string from `FONT_STACKS` + `FONT_STYLE`, set it on a singleton offscreen canvas-2d context, wrap text into the inner box (`size - 2*NOTE_PADDING`) using greedy word-wrap, sum line heights with `LINE_HEIGHT_MULTIPLIER = 1.2`. The largest font that doesn't overflow `innerHeight` wins.
+Binary search the integer range `[MIN_FIT_FONT_SIZE, MAX_FIT_FONT_SIZE]`. For each candidate, build a CSS font string from `FONT_STACKS` + `FONT_WEIGHT` + `FONT_STYLE`, set it on a singleton offscreen canvas-2d context, wrap text into the inner box (`size - 2*NOTE_PADDING`) using greedy word-wrap, sum line heights with `LINE_HEIGHT_MULTIPLIER = 1.2`. The largest font that doesn't overflow `innerHeight` wins.
 
-Empty text falls back to `MIN_FIT_FONT_SIZE` so the placeholder caret has a sensible size.
+**Empty text is sized as a single character** (probe = `'M'`). For a default-sized note this lets the caret scale up to ~`MAX_FIT_FONT_SIZE = 96` and gives the user an obvious "type here" target. As soon as content is added the size recomputes.
+
+## Editor centering
+
+The textarea is auto-sized in `Note.tsx` via a `useLayoutEffect` that runs after `fontSizeWorld` and `effectiveSize` are computed:
+
+```ts
+ta.style.height = 'auto';
+const cap = ta.parentElement?.clientHeight ?? Infinity;
+ta.style.height = `${Math.min(ta.scrollHeight, cap)}px`;
+```
+
+Combined with the parent flex `align-items:center`, this means:
+- Empty / short text → textarea is short, parent flex centers it vertically → caret sits at the visual center of the note.
+- Text grows → textarea height grows, eventually fills the parent (capped at parent's inner height so it never pushes the note open).
+
+CSS in `fonts.css` mirrors this: `[data-archon-note-textarea]` uses `height: auto; min-height: 1em; max-height: 100%`. The JS height set via `style.height` overrides the CSS default for measurement-driven sizing.
 
 ## Drawing-mode + view-mode handling
 

@@ -1,4 +1,34 @@
-import { ArchonNote, ArchonNotePluginData, ArchonPluginAPI } from '../types';
+import { ArchonNote, ArchonNotePluginData, ArchonPluginAPI, NoteFontFamily } from '../types';
+
+/**
+ * Coerce a possibly-legacy font-family value into the current enum.
+ * Older plugin versions used `'sans' | 'serif'`; the second slot has been
+ * renamed to `'marker'` (Permanent Marker) — old `'serif'` values are
+ * mapped to `'marker'` on read so existing notes keep their second-font choice.
+ */
+function normalizeFontFamily(v: unknown): NoteFontFamily {
+  if (v === 'sans' || v === 'marker') return v;
+  if (v === 'serif') return 'marker';
+  return 'sans';
+}
+
+function normalizeNote(raw: unknown): ArchonNote | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Partial<ArchonNote> & { fontFamily?: unknown };
+  if (typeof r.id !== 'string') return null;
+  return {
+    id: r.id,
+    position: r.position && typeof r.position.x === 'number' && typeof r.position.y === 'number'
+      ? { x: r.position.x, y: r.position.y }
+      : { x: 0, y: 0 },
+    size: r.size && typeof r.size.width === 'number' && typeof r.size.height === 'number'
+      ? { width: r.size.width, height: r.size.height }
+      : { width: 220, height: 220 },
+    text: typeof r.text === 'string' ? r.text : '',
+    bgColor: typeof r.bgColor === 'string' ? r.bgColor : '#ffd84d',
+    fontFamily: normalizeFontFamily(r.fontFamily),
+  };
+}
 
 /**
  * Tiny store wrapping the host's plugin-data slot. Reads always go through
@@ -20,7 +50,14 @@ const EMPTY: ArchonNotePluginData = { notes: {}, noteOrder: [] };
 export function readNotesData(api: ArchonPluginAPI): ArchonNotePluginData {
   const raw = api.getPluginData() as Partial<ArchonNotePluginData> | undefined;
   if (!raw) return { ...EMPTY, notes: {}, noteOrder: [] };
-  const notes = (raw.notes && typeof raw.notes === 'object') ? raw.notes as Record<string, ArchonNote> : {};
+  // Normalize each note so legacy fields (e.g. fontFamily: 'serif') are mapped
+  // to current values, and missing fields get sensible defaults.
+  const rawNotes = (raw.notes && typeof raw.notes === 'object') ? raw.notes as Record<string, unknown> : {};
+  const notes: Record<string, ArchonNote> = {};
+  for (const id of Object.keys(rawNotes)) {
+    const n = normalizeNote(rawNotes[id]);
+    if (n) notes[n.id] = n;
+  }
   const order = Array.isArray(raw.noteOrder) ? raw.noteOrder.filter(id => id in notes) : Object.keys(notes);
   // Append any notes missing from order (defensive: pluginData edited externally).
   for (const id of Object.keys(notes)) {

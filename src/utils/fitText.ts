@@ -1,4 +1,4 @@
-import { FONT_STACKS, FONT_STYLE, MAX_FIT_FONT_SIZE, MIN_FIT_FONT_SIZE, NOTE_PADDING } from '../constants';
+import { FONT_STACKS, FONT_STYLE, FONT_WEIGHT, MAX_FIT_FONT_SIZE, MIN_FIT_FONT_SIZE, NOTE_PADDING } from '../constants';
 import { NoteFontFamily } from '../types';
 
 /**
@@ -30,7 +30,8 @@ const LINE_HEIGHT_MULTIPLIER = 1.2;
 function buildFontString(fontSize: number, fontFamily: NoteFontFamily): string {
   const stack = FONT_STACKS[fontFamily];
   const style = FONT_STYLE[fontFamily];
-  return `${style} 600 ${fontSize}px ${stack}`;
+  const weight = FONT_WEIGHT[fontFamily];
+  return `${style} ${weight} ${fontSize}px ${stack}`;
 }
 
 function wrapInto(words: string[], maxWidth: number, ctx: CanvasRenderingContext2D): string[] {
@@ -104,9 +105,10 @@ export function fitText(
   const innerWidth = Math.max(1, width - NOTE_PADDING * 2);
   const innerHeight = Math.max(1, height - NOTE_PADDING * 2);
 
-  if (!text || text.trim().length === 0) {
-    return MIN_FIT_FONT_SIZE;
-  }
+  // Empty text is sized as a single character so the caret is prominent and
+  // the note immediately invites typing (per UI spec — empty == 1 char).
+  // Capped at MAX_FIT_FONT_SIZE.
+  const probe = !text || text.length === 0 ? 'M' : text;
 
   let lo = MIN_FIT_FONT_SIZE;
   let hi = MAX_FIT_FONT_SIZE;
@@ -114,7 +116,7 @@ export function fitText(
 
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
-    if (fitsAt(text, mid, fontFamily, innerWidth, innerHeight)) {
+    if (fitsAt(probe, mid, fontFamily, innerWidth, innerHeight)) {
       best = mid;
       lo = mid + 1;
     } else {

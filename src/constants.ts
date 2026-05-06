@@ -19,16 +19,29 @@ export const MAX_FIT_FONT_SIZE = 96;
 /** Default font for a brand-new note. */
 export const DEFAULT_FONT_FAMILY: NoteFontFamily = 'sans';
 
-/** CSS font-family stacks. Both stacks include cyrillic-capable fallbacks. */
+/**
+ * CSS font-family stacks. Both stacks include cyrillic-capable fallbacks
+ * (system fonts cover cyrillic; Permanent Marker is latin-only so we fall
+ * through to Caveat → cursive for non-latin glyphs).
+ */
 export const FONT_STACKS: Record<NoteFontFamily, string> = {
-  sans: '"Open Sans", "Inter", "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif',
-  serif: '"PT Serif", Georgia, "Times New Roman", serif',
+  sans: 'system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif',
+  marker: '"Permanent Marker", "Caveat", "Bradley Hand", cursive',
 };
 
-/** When `serif` is active we render the text in italic, like the design reference. */
+/** Font style per family. Permanent Marker already looks hand-drawn — no italic needed. */
 export const FONT_STYLE: Record<NoteFontFamily, 'normal' | 'italic'> = {
   sans: 'normal',
-  serif: 'italic',
+  marker: 'normal',
+};
+
+/**
+ * Font weight per family. Permanent Marker only ships at weight 400; sans
+ * gets 600 for slightly stronger presence on a colored background.
+ */
+export const FONT_WEIGHT: Record<NoteFontFamily, number> = {
+  sans: 600,
+  marker: 400,
 };
 
 /** Debounce window (ms) for committing text edits to undo history. */
@@ -38,5 +51,39 @@ export const TEXT_COMMIT_DEBOUNCE_MS = 300;
 export const Z_NOTE_BASE = 1;
 export const Z_NOTE_SELECTED = 2;
 export const Z_NOTE_EDITING = 3;
+export const Z_STYLING_BUTTON = 9;
 export const Z_STYLING_POPUP = 10;
 export const Z_DELETE_BUTTON = 11;
+
+// ---------- Resize grid ----------
+
+/**
+ * Distance (CSS px) the resize grid is pushed outside the note edge on every
+ * side. With `RESIZE_GRID_OFFSET = 15` the grid is `2 * 15 = 30` CSS px wider
+ * AND taller than the note — handles sit clearly past the note border with a
+ * visible gap (Miro / Figma style).
+ */
+export const RESIZE_GRID_OFFSET = 15;
+
+// ---------- Styling popup geometry (CSS px, fixed) ----------
+
+/** Estimated popup outer width in CSS px (4×4 color grid + Aa toggle). */
+export const STYLING_POPUP_WIDTH = 252;
+/** Estimated popup outer height in CSS px. */
+export const STYLING_POPUP_HEIGHT = 152;
+/** Margin (CSS px) between popup and note when placing it. */
+export const STYLING_POPUP_MARGIN = 12;
+
+// ---------- "Open styling" button geometry ----------
+
+/** Button width × height in CSS px. */
+export const STYLING_BUTTON_SIZE = 28;
+/**
+ * How far above the note's top edge (CSS px) the button is anchored. Sized so
+ * the button bottom clears the resize grid (which extends `RESIZE_GRID_OFFSET`
+ * outside the note plus a half-handle radius) by ~8 CSS px — looks like a
+ * deliberate floating control rather than sitting on top of a handle.
+ *
+ * (15 grid offset + 5 half-handle + 8 gap + 28 button height = 56)
+ */
+export const STYLING_BUTTON_OFFSET = 56;

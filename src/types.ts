@@ -4,7 +4,15 @@
  * plugin builds in isolation and ships as a self-contained IIFE.
  */
 
-export type NoteFontFamily = 'sans' | 'serif';
+/**
+ * Font family for note text.
+ *  - `'sans'`   → system Sans Serif (fast, locally available, neutral).
+ *  - `'marker'` → "Permanent Marker" (Google Font, hand-written felt-tip look).
+ *
+ * Legacy projects may carry `fontFamily: 'serif'` from older builds; the
+ * normalization in `store/notesStore.ts` maps that to `'marker'` on read.
+ */
+export type NoteFontFamily = 'sans' | 'marker';
 
 /**
  * A sticky note. Lives entirely in `installedPlugins['archon-note'].pluginData.notes[id]`.

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check } from 'lucide-react';
 import { NOTE_PALETTE } from '../colors';
-import { FONT_STACKS, FONT_STYLE } from '../constants';
+import { FONT_STACKS, FONT_STYLE, FONT_WEIGHT } from '../constants';
 import { NoteFontFamily } from '../types';
 
 interface Props {
@@ -12,6 +12,8 @@ interface Props {
   onPickColor: (hex: string) => void;
   onPickFont: (family: NoteFontFamily) => void;
 }
+
+const FONT_OPTIONS: NoteFontFamily[] = ['sans', 'marker'];
 
 const StylingPopup: React.FC<Props> = ({ position, bgColor, fontFamily, onPickColor, onPickFont }) => {
   return (
@@ -79,9 +81,9 @@ const StylingPopup: React.FC<Props> = ({ position, bgColor, fontFamily, onPickCo
       {/* divider */}
       <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(0,0,0,0.08)' }} />
 
-      {/* Font toggle */}
+      {/* Font toggle: Sans Serif | Permanent Marker */}
       <div style={{ display: 'flex', gap: 4 }}>
-        {(['sans', 'serif'] as NoteFontFamily[]).map((family) => {
+        {FONT_OPTIONS.map((family) => {
           const active = family === fontFamily;
           return (
             <button
@@ -105,12 +107,13 @@ const StylingPopup: React.FC<Props> = ({ position, bgColor, fontFamily, onPickCo
                 justifyContent: 'center',
                 fontFamily: FONT_STACKS[family],
                 fontStyle: FONT_STYLE[family],
-                fontWeight: 600,
-                fontSize: 18,
+                fontWeight: FONT_WEIGHT[family],
+                fontSize: family === 'marker' ? 16 : 18,
                 lineHeight: 1,
                 padding: 0,
               }}
-              aria-label={`Font ${family}`}
+              aria-label={`Font ${family === 'sans' ? 'Sans Serif' : 'Permanent Marker'}`}
+              title={family === 'sans' ? 'Sans Serif' : 'Permanent Marker'}
             >
               Aa
             </button>

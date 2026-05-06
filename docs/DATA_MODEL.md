@@ -33,7 +33,7 @@ interface ArchonNote {
   size:     { width: number; height: number };  // world units
   text: string;                                 // freeform; \n preserved
   bgColor: string;                              // hex from NOTE_PALETTE
-  fontFamily: 'sans' | 'serif';                 // see FONT_STACKS in constants.ts
+  fontFamily: 'sans' | 'marker';                // see FONT_STACKS in constants.ts
 }
 ```
 
@@ -46,7 +46,7 @@ interface ArchonNote {
 | `size.width/height` | `≥ MIN_NOTE_SIZE` (60×60). Enforced by `Note.tsx` `applyResize`. |
 | `text` | UTF-8 string; freeform. Empty allowed. |
 | `bgColor` | Hex; should match a swatch from `colors.ts`. Unknown hex falls back to default text color. |
-| `fontFamily` | Exactly `'sans'` or `'serif'`. Anything else is treated as `'sans'` (fallback in `FONT_STACKS` lookup). |
+| `fontFamily` | Exactly `'sans'` (system Sans Serif) or `'marker'` (Permanent Marker via Google Fonts). Legacy `'serif'` from older plugin builds is normalized to `'marker'` on read in `store/notesStore.ts` `normalizeNote`. Anything else is treated as `'sans'`. |
 
 ### What is NOT stored
 
