@@ -26,11 +26,6 @@ cd archon-note
 npm install
 npm run build           # → build/index.js + build/style.css
 npm run package         # → build/archon-note.zip + bumps version
-
-# 2. deploy from repo root
-cd ..
-npm run deploy:dev:note    # → http://localhost:80 marketplace
-npm run deploy:note        # → https://surecom.in marketplace
 ```
 
 `deploy` and `deploy:dev` are intentionally **not** in this plugin's `package.json` — the deploy recipe is centralised in `_plugin-deploy/` so consumers reading the plugin source don't see how it gets to the marketplace.
