@@ -97,6 +97,8 @@ Small entry-point that opens the styling popup. Visible only when a note is `sel
 
 ## Z-order (within the overlay div)
 
+The plugin only owns z-indexes inside its own overlay container (the `<div>` it receives from `mountOverlay`). All values below are stacking-context-local:
+
 | Element | z-index |
 |---------|---------|
 | Note (idle)            | `Z_NOTE_BASE = 1`        |
@@ -106,7 +108,7 @@ Small entry-point that opens the styling popup. Visible only when a note is `sel
 | Styling popup          | `Z_STYLING_POPUP = 10`   |
 | Delete button          | `Z_DELETE_BUTTON = 11`   |
 
-The overlay container itself sits at `z-[400]` (host).
+The host owns the absolute z-index of the overlay container itself.
 
 ## State visual cheat-sheet
 

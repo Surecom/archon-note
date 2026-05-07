@@ -10,17 +10,19 @@ archon-note/src/
 ├── types.ts                // ArchonNote, ArchonNotePluginData, host API mirror
 ├── constants.ts            // sizes, padding, font stacks, debounce, z-indexes
 ├── colors.ts               // 16-swatch palette + textColorFor
-├── fonts.css               // Open Sans + PT Serif italic + textarea reset
+├── fonts.css               // Permanent Marker + Caveat (Cyrillic fallback) + textarea reset
 ├── store/
 │   ├── notesStore.ts       // readNotesData, createNote, updateNote, deleteNote, bringToFront
 │   └── viewport.ts         // worldToScreen, screenToWorld, viewportCenterWorld, readViewport
 ├── utils/
 │   ├── fitText.ts          // binary-search font-size that fits text in a box
+│   ├── popupPosition.ts    // smart-positioning for the styling popup
 │   └── id.ts               // RFC4122-ish v4 id (no uuid dep)
 └── components/
     ├── NotesOverlay.tsx    // root: subscriptions, selection state, iterate notes
-    ├── Note.tsx            // one note: state machine, drag/resize, edit, render
+    ├── Note.tsx            // one note: state machine, drag/resize, edit, render, rAF loop
     ├── DeleteButton.tsx    // red-circle X (top-right of selected note)
+    ├── StylingButton.tsx   // small Palette button above the resize grid
     └── StylingPopup.tsx    // 16-color grid + Aa/Aa font toggle
 ```
 
@@ -31,19 +33,19 @@ host loads plugin script
         ↓
 window.__archon_register_plugin(plugin)
         ↓
-pluginRegistry sets status='active'
+host registry marks the plugin active
         ↓
-CanvasOverlayPluginHost (host) creates a <div> at z-[400] and calls
+host creates a <div> overlay above the canvas and calls
 plugin.mountOverlay(div, api)
         ↓
 src/index.tsx: ReactDOM.createRoot(div).render(<NotesOverlay api={api} />)
         ↓
-NotesOverlay subscribes to viewport / project / view-mode / drawing-mode
+NotesOverlay subscribes to project / view-mode / drawing-mode
         ↓
 each ArchonNote rendered as a <Note> child
 ```
 
-User clicks the plugin icon (anywhere) → host's PluginHost.tsx detects `displayMode === 'canvas-overlay'`, dispatches `plugin.onIconClick(api)`, immediately closes the host slot. `onIconClick` builds an `ArchonNote` at the viewport center and calls `createNote(api, note)`.
+When the user clicks the plugin icon (anywhere the host surfaces it) the host detects `displayMode === 'canvas-overlay'` and dispatches `plugin.onIconClick(api)` instead of opening any host UI. `onIconClick` builds an `ArchonNote` at the viewport center and calls `createNote(api, note)`.
 
 ## Note state machine (`Note.tsx`)
 
@@ -114,7 +116,7 @@ Keyboard shortcuts (window-level keydown, gated by `state !== 'idle'`):
 | `Escape` | Deselect (`onRequestDeselect`) | Flush text + back to selected (`onRequestSelect`) |
 | `Delete` / `Backspace` | **Delete the note** (`deleteNote(api, note.id)`) | Falls through to the textarea so the user can erase characters |
 
-The Delete/Backspace path early-returns if `document.activeElement` is an `<input>`, `<textarea>` or contentEditable — so typing in the host's right panel never accidentally deletes a sticky note. After delete, `NotesOverlay`'s "drop selection if its note disappears" effect auto-clears the selection.
+The Delete/Backspace path early-returns if `document.activeElement` is an `<input>`, `<textarea>` or contentEditable — so typing in any host input field never accidentally deletes a sticky note. After delete, `NotesOverlay`'s "drop selection if its note disappears" effect auto-clears the selection.
 
 ## Viewport math + zero-lag camera follow
 
@@ -249,18 +251,18 @@ That means **global Cmd+Z reverts plugin actions just like canvas actions**. The
 
 ## Z-order
 
-| Layer (in DOM)                                 | z-index             |
-|------------------------------------------------|---------------------|
-| host `<canvas>`                                | < 100               |
-| `CanvasOverlayPluginHost` container             | `z-[400]`           |
-| Note (idle)                                    | `Z_NOTE_BASE = 1`   |
-| Note (selected)                                | `Z_NOTE_SELECTED=2` |
-| Note (editing)                                 | `Z_NOTE_EDITING=3`  |
-| Styling popup (inside selected/editing note)   | `Z_STYLING_POPUP=10`|
-| Delete button (inside selected/editing note)   | `Z_DELETE_BUTTON=11`|
-| host `DrawingTools` toolbar                    | `z-[1000]`          |
+The plugin only owns z-indexes inside its own overlay container (which the host mounts above the canvas). All values below are stacking context-local to that container:
 
-The overlay container is `pointer-events: none` so clicks pass through to the canvas; each note opts in via `pointer-events: auto` only when `interactive`.
+| Layer                                          | z-index               |
+|------------------------------------------------|-----------------------|
+| Note (idle)                                    | `Z_NOTE_BASE = 1`     |
+| Note (selected)                                | `Z_NOTE_SELECTED = 2` |
+| Note (editing)                                 | `Z_NOTE_EDITING = 3`  |
+| Styling button                                 | `Z_STYLING_BUTTON = 9`|
+| Styling popup                                  | `Z_STYLING_POPUP = 10`|
+| Delete button                                  | `Z_DELETE_BUTTON = 11`|
+
+The overlay container received from `mountOverlay` is `pointer-events: none` by default so clicks pass through to whatever the host paints below; each note opts in via `pointer-events: auto` only when `interactive`.
 
 ## Adding a new feature — quick checklist
 

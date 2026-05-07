@@ -2,7 +2,7 @@
 
 Sticky-note overlay for the [ArchON](https://archon.su) canvas. Public plugin. Authored from scratch.
 
-> **Token-efficiency tip for AI agents:** before editing the plugin or its host integration, read **ALL** of `docs/` in this folder. Together they cover everything the host exposes, what the plugin owns, and the invariants you must not break — saves you from reading 10+ source files every time.
+> **Looking for the architecture or full spec?** Everything is in the [`docs/`](docs/) folder of this repository — `ARCHITECTURE.md`, `DATA_MODEL.md`, `HOST_CONTRACT.md`, `UI_SPEC.md`. Each file covers one concern (state machine, data shape, host API contract, visual spec) so you can read just the part you need without scanning the whole source tree.
 
 ## Screenshot
 
@@ -26,23 +26,22 @@ A selected note inside the ArchON canvas with the styling popup open — 16-colo
 
 - **Zero-lag camera follow.** Each note runs its own `requestAnimationFrame` loop that reads the current viewport synchronously and mutates DOM directly via refs (no React re-renders for camera changes). Notes update in the SAME frame as the canvas — no perceptible drag during pan / zoom.
 - **GPU-accelerated movement** via `transform: translate3d(...)` + `willChange: 'transform'`.
-- **Wheel forwarding.** A non-passive `wheel` listener on each note re-dispatches the event to the host `<canvas>` so panning continues smoothly when the cursor crosses a note.
+- **Wheel forwarding.** A non-passive `wheel` listener on each note re-dispatches the event to the host canvas so panning continues smoothly when the cursor crosses a note.
 
-## How to install (development)
-
-Build inside the plugin folder; deploy from the repo root via the centralised script in `_plugin-deploy/` (see [`../_plugin-deploy/README.md`](../_plugin-deploy/README.md)).
+## Build
 
 ```bash
-# 1. build the plugin
 cd archon-note
 npm install
 npm run build           # → build/index.js + build/style.css
 npm run package         # → build/archon-note.zip + bumps version
 ```
 
+That's the whole local pipeline. The packaged ZIP can be uploaded to any compatible plugin marketplace.
+
 ## How it integrates with the host
 
-`displayMode: 'canvas-overlay'`. The host's `CanvasOverlayPluginHost` (in `client/src/components/`) auto-mounts the plugin into a dedicated `<div>` layered above the canvas (`z-[400]`) as soon as the script loads — no host modal/window. Clicks on the plugin icon (left-palette flyout, view-mode drawer, etc.) dispatch `onIconClick(api)` instead of opening any host UI.
+`displayMode: 'canvas-overlay'`. The host auto-mounts the plugin into a dedicated `<div>` layered above the canvas as soon as the script registers — no host modal/window. Clicks on the plugin icon (anywhere the host surfaces it) dispatch `onIconClick(api)` instead of opening any host UI. See [`docs/HOST_CONTRACT.md`](docs/HOST_CONTRACT.md) for the exact API methods the plugin uses.
 
 ## Documentation map
 
@@ -50,7 +49,7 @@ npm run package         # → build/archon-note.zip + bumps version
 |------|-----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | You're changing the state machine (idle/selected/editing), drag/resize logic, viewport math, fitText, undo strategy, drawing/view-mode behavior, the rAF loop, or wheel forwarding. |
 | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | You're changing the `ArchonNote` shape, the `pluginData` slot layout, font-family enum, or anything that touches save/load. |
-| [docs/HOST_CONTRACT.md](docs/HOST_CONTRACT.md) | You're touching `client/src/plugins/types.ts`, `api.ts`, `CanvasOverlayPluginHost.tsx`, or any host code archon-note depends on. |
+| [docs/HOST_CONTRACT.md](docs/HOST_CONTRACT.md) | You need to know which host API methods the plugin depends on (and how to keep working on hosts that don't yet implement the optional ones). |
 | [docs/UI_SPEC.md](docs/UI_SPEC.md) | You're tweaking colors, fonts, sizes, padding, popup positioning, the styling button, or any visual concern. |
 
 ## Critical invariants (do not break)

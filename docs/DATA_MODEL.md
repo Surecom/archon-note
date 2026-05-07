@@ -5,19 +5,12 @@
 ## Where the data lives
 
 ```
-host ProjectState
+host project state
 └── installedPlugins['archon-note'] : InstalledPlugin
     └── pluginData : ArchonNotePluginData
 ```
 
-`installedPlugins.pluginData` is already serialised by:
-
-- `client/src/store/persistence.ts` — `localStorage`
-- `client/src/components/Toolbar/useProjectIO.ts` — JSON file export
-- Google Drive save/load (uses the same `{ project }` envelope)
-- `client/src/hooks/syncMerge.ts` — Drive concurrent-edit merge (LWW per-record on `installedPlugins`)
-
-archon-note never stores anything outside this slot — there is no `localStorage`, no `IndexedDB`, no in-memory persistent state.
+`installedPlugins[*].pluginData` is part of the host's standard project state and is expected to be serialised by the host's persistence pipeline (in-browser local storage, JSON file export/import, and any cloud sync flow the host implements). archon-note never stores anything outside this slot — there is no `localStorage`, no `IndexedDB`, no in-memory persistent state on the plugin side.
 
 ## Schema
 
@@ -33,7 +26,7 @@ interface ArchonNote {
   size:     { width: number; height: number };  // world units
   text: string;                                 // freeform; \n preserved
   bgColor: string;                              // hex from NOTE_PALETTE
-  fontFamily: 'sans' | 'marker';                // see FONT_STACKS in constants.ts
+  fontFamily: 'sans' | 'marker';                // see FONT_STACKS in src/constants.ts
 }
 ```
 
@@ -45,19 +38,19 @@ interface ArchonNote {
 | `position.x/y` | Any finite number; world units. |
 | `size.width/height` | `≥ MIN_NOTE_SIZE` (60×60). Enforced by `Note.tsx` `applyResize`. |
 | `text` | UTF-8 string; freeform. Empty allowed. |
-| `bgColor` | Hex; should match a swatch from `colors.ts`. Unknown hex falls back to default text color. |
-| `fontFamily` | Exactly `'sans'` (system Sans Serif) or `'marker'` (Permanent Marker via Google Fonts). Legacy `'serif'` from older plugin builds is normalized to `'marker'` on read in `store/notesStore.ts` `normalizeNote`. Anything else is treated as `'sans'`. |
+| `bgColor` | Hex; should match a swatch from `src/colors.ts`. Unknown hex falls back to default text color. |
+| `fontFamily` | Exactly `'sans'` (system Sans Serif) or `'marker'` (Permanent Marker via Google Fonts). Legacy `'serif'` from older plugin builds is normalized to `'marker'` on read in `src/store/notesStore.ts` `normalizeNote`. Anything else is treated as `'sans'`. |
 
 ### What is NOT stored
 
-- **Font size** — recomputed every render via `utils/fitText.ts`.
+- **Font size** — recomputed every render via `src/utils/fitText.ts`.
 - **Selection / hover state** — local React state in `NotesOverlay.tsx`.
 - **Drag / resize transient values** — local state in `Note.tsx`, only committed on `pointerup`.
-- **Undo history** — host's `historySlice` owns it via `'PLUGIN_DATA_UPDATE'` commands.
+- **Undo history** — owned by the host, surfaced via `'PLUGIN_DATA_UPDATE'` history commands the plugin pushes through `applyPluginDataDelta`.
 
 ## Defensive normalization on read
 
-`store/notesStore.ts` `readNotesData(api)`:
+`src/store/notesStore.ts` `readNotesData(api)`:
 
 ```
 const raw = api.getPluginData() as Partial<ArchonNotePluginData> | undefined;
@@ -80,45 +73,39 @@ This means the plugin tolerates:
 user action (drag, edit, color pick, …)
         │
         ▼
-notesStore.* helper (createNote / updateNote / deleteNote / bringToFront)
+src/store/notesStore.ts helper (createNote / updateNote / deleteNote / bringToFront)
         │
         ▼
 api.applyPluginDataDelta({ set: { notes, noteOrder } }, label)
-        │       (host bridge in CanvasOverlayPluginHost.tsx)
+        │       (host-side: builds undo delta, pushes 'PLUGIN_DATA_UPDATE' command)
         ▼
-1. read before-snapshot of pluginData
-2. compute undo delta
-3. dispatch applyPluginDataDelta reducer (forward)
-4. dispatch pushCommand({ type: 'PLUGIN_DATA_UPDATE', do, undo })
+host applies the patch to installedPlugins[id].pluginData
         │
         ▼
-projectSlice.applyPluginDataDelta merges the patch into installedPlugins[id].pluginData
+host persists the project (debounced)
+host fires its project-changed signal
         │
         ▼
-store update → persistence.saveState (debounced) writes to localStorage
-              + plugin's subscribeToProjectChanges callback fires → re-render
+plugin's subscribeToProjectChanges callback runs → re-render
 ```
 
 ## Adding a new field
 
 1. Add the field to `ArchonNote` in `src/types.ts`.
-2. Decide a default. If old projects shouldn't break: tolerate `undefined` in renderers, OR add a normalization step in `notesStore.readNotesData`.
+2. Decide a default. If old projects shouldn't break: tolerate `undefined` in renderers, OR add a normalization step in `src/store/notesStore.ts` `readNotesData`.
 3. Update `Note.tsx` to render/use the field.
-4. Update `notesStore.createNote` / `updateNote` callsites if the new field is set on creation.
+4. Update `src/store/notesStore.ts` `createNote` / `updateNote` callsites if the new field is set on creation.
 5. Document the field in this file (table above).
-
-**Do NOT** add the field to `client/src/types.ts` `ArchonNote` — that namespace is host-only and archon-note carries its own mirror in `archon-note/src/types.ts`.
 
 ## Removing a field
 
-1. Stop reading it in `Note.tsx` and `notesStore.ts`.
-2. Optionally add a normalization step in `notesStore.readNotesData` to strip the field from old projects on load (otherwise it lingers harmlessly inside `pluginData`).
+1. Stop reading it in `Note.tsx` and `src/store/notesStore.ts`.
+2. Optionally add a normalization step in `readNotesData` to strip the field from old projects on load (otherwise it lingers harmlessly inside `pluginData`).
 3. Update this file.
 
-## Cross-host concerns
+## Concurrent edits
 
-- **Drive merge (`syncMerge.ts`)** — `installedPlugins` is in `COLLECTION_KEYS`, so per-record merge is JSON-equality based. Concurrent edits to the same plugin's `pluginData` resolve LWW (remote wins, conflict counted). For archon-note this means two users editing notes on the same Drive file get last-write-wins per save round-trip — acceptable for sticky notes.
-- **`migrateProject.ts`** — initialises `installedPlugins = {}` for legacy files (no archon-note data yet). `pluginData` itself has no per-collection migration loop.
+If the host syncs the project across multiple devices (cloud / shared edit sessions), the plugin's `pluginData` is treated like any other top-level project record by the host's merge strategy. archon-note assumes a last-write-wins semantic on the whole `pluginData` blob — acceptable for sticky notes. Plugins needing finer-grained conflict resolution would have to layer their own merge logic on top.
 
 ## Schema version
 

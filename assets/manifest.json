@@ -1,11 +1,12 @@
 {
   "id": "archon-note",
   "name": "ArchON Note",
-  "version": "1.0.14",
+  "version": "1.0.16",
   "description": "Sticky notes on the canvas — click the icon to drop a note, drag to move, double-click to edit, pick from a 16-color palette and a Sans Serif / Permanent Marker font toggle.",
   "author": "Surecom",
   "icon": "StickyNote",
   "visibility": "public",
+  "repository": "https://github.com/Surecom/archon-note",
   "permissions": [
     "project:read",
     "project:write"

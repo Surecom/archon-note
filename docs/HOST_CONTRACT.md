@@ -1,6 +1,6 @@
 # archon-note — Host Contract
 
-> Read this file before touching `client/src/plugins/types.ts`, `api.ts`, `CanvasOverlayPluginHost.tsx`, `PluginHost.tsx`, or anything else archon-note depends on.
+> Read this file before changing anything in this plugin that depends on what the host provides — the lifecycle hooks, the plugin API surface, persistence semantics, or undo/redo.
 
 ## Required host capabilities
 
@@ -9,9 +9,9 @@ archon-note is a `displayMode: 'canvas-overlay'` plugin. The host MUST provide:
 ### 1. Plugin lifecycle for `'canvas-overlay'`
 
 - `ArchonPlugin.displayMode` accepts `'canvas-overlay'` (in addition to `'modal'` and `'floating'`).
-- `ArchonPlugin.mountOverlay(container, api)` — called once by `CanvasOverlayPluginHost` immediately after registration. The plugin renders into `container`. Container is a DOM `<div>` layered above the canvas at `z-[400]`, full inset, `pointer-events: none` (children opt in).
-- `ArchonPlugin.unmountOverlay()` — called when the plugin is unregistered. Plugin tears down its React root.
-- `ArchonPlugin.onIconClick(api)` — called by `PluginHost` when the user clicks the plugin icon (left palette flyout, view-mode drawer, plugins section). `PluginHost` immediately calls `onClose()` so the slot resets without opening any modal.
+- `ArchonPlugin.mountOverlay(container, api)` — called once by the host immediately after registration. The plugin renders into `container`. The container is a DOM `<div>` layered above the canvas, full inset, `pointer-events: none` (children opt in).
+- `ArchonPlugin.unmountOverlay()` — called when the plugin is unregistered. The plugin tears down its React root.
+- `ArchonPlugin.onIconClick(api)` — called by the host when the user clicks the plugin icon (anywhere the host surfaces it). The host immediately closes whatever icon-click slot it had so no modal opens.
 
 ### 2. Required `ArchonPluginAPI` methods
 
@@ -29,28 +29,23 @@ archon-note is a `displayMode: 'canvas-overlay'` plugin. The host MUST provide:
 | `getIsDrawingMode()` | Dim overlay + disable interaction when true |
 | `subscribeToDrawingMode(cb)` | React to drawing-mode toggle |
 | `subscribeToViewportFrame(cb)` ⭐ | Per-frame viewport tick — drives the per-Note DOM-mutation pass for zero-lag camera follow + drag/resize transient state. Falls back to a per-Note `requestAnimationFrame` loop on older hosts. |
-| `attachCanvasWheelForwarding(el)` ⭐ | Wheel re-dispatch onto host `<canvas>` so panning continues over notes / styling button / styling popup. Falls back to a plugin-local helper that uses `document.querySelector('main canvas')` on older hosts. |
+| `attachCanvasWheelForwarding(el)` ⭐ | Wheel re-dispatch onto the host canvas so panning continues over notes / styling button / styling popup. Falls back to a plugin-local helper on older hosts. |
 | `getCanvasElement()` ⭐ | Used inside the wheel-forwarding fallback when the host predates `attachCanvasWheelForwarding` but already exposes `getCanvasElement`. |
 
-⭐ = canvas-overlay helper API added in host >= 2026-05-06. Plugins built against it must keep a fallback for older hosts (archon-note does — see `attachWheelForwarding(api, el)` and the `if (api.subscribeToViewportFrame) … else { requestAnimationFrame loop }` branch in `Note.tsx`).
+⭐ = canvas-overlay helper API. Plugins built against it must keep a fallback for older hosts (archon-note does — see `attachWheelForwarding(api, el)` and the `if (api.subscribeToViewportFrame) … else { requestAnimationFrame loop }` branch in `src/components/Note.tsx`).
 
-archon-note **does NOT** use `applyMcpOperations`, `exportLayerAsPNG`, `exportScenarioAsVideo`, `exportSystemContainerDiagram`, `checkVoicingAvailable`, `getWindowHeaderContainer`, `setWindowMinimized`. They are floating-window or modal concerns.
+archon-note **does NOT** use `applyMcpOperations`, `exportLayerAsPNG`, `exportScenarioAsVideo`, `exportSystemContainerDiagram`, `checkVoicingAvailable`, `getWindowHeaderContainer`, `setWindowMinimized`. Those are floating-window or modal concerns.
 
 ### 3. Persistence
 
-`installedPlugins[pluginId].pluginData` MUST round-trip through:
-
-- `localStorage` save/load (debounced via `store.subscribe` in `client/src/store/index.ts`).
-- JSON file import/export (via `useProjectIO.ts`).
-- Google Drive save/load (uses the same `{ project }` envelope).
-- `migrateProject.ts` — must initialise empty `installedPlugins = {}` for legacy files (already done).
+`installedPlugins[pluginId].pluginData` MUST round-trip through whatever persistence pipeline the host uses (typically: in-browser localStorage save/load, JSON file import/export, and any cloud sync flow). The host MUST also initialise an empty `installedPlugins` map for legacy projects that pre-date plugin support.
 
 ### 4. Undo / redo
 
-- `applyPluginDataDelta` reducer in `projectSlice.ts` accepts `{ pluginId, delta: { set?, remove? } }` and merges into `installedPlugins[id].pluginData`.
-- `applyHistoryDelta` reducer in `projectSlice.ts` accepts `delta.installedPlugins[id].pluginData` (either as `{ set?, remove? }` patch, `null` to clear, or whole-object replacement).
-- `HistoryActionType` union includes `'PLUGIN_DATA_UPDATE'`.
-- The host bridge in `CanvasOverlayPluginHost.tsx` builds the undo delta automatically (`buildUndoDelta(before, delta)` in that file).
+- The host's `applyPluginDataDelta(pluginId, delta, label)` action accepts `{ set?, remove? }` and merges into `installedPlugins[id].pluginData`.
+- The host's history-replay action accepts `delta.installedPlugins[id].pluginData` (either as a `{ set?, remove? }` patch, `null` to clear, or a whole-object replacement).
+- The host's `HistoryActionType` union includes `'PLUGIN_DATA_UPDATE'`.
+- The host's plugin bridge builds the undo delta automatically.
 
 ## What archon-note expects in return
 
@@ -59,27 +54,27 @@ When archon-note calls `api.applyPluginDataDelta({ set: { notes: {…}, noteOrde
 1. Within the same tick: `installedPlugins['archon-note'].pluginData.notes` and `.noteOrder` are replaced with the patched values.
 2. Within the same tick: a `'PLUGIN_DATA_UPDATE'` history command is pushed onto the global undo stack.
 3. Within the same tick: `subscribeToProjectChanges` callbacks fire (because `state.project` reference changed).
-4. Eventually (debounced): persistence layer writes to `localStorage` / Drive.
+4. Eventually (debounced): the persistence layer writes to durable storage.
 
-`applyPluginDataDelta` MUST be synchronous — `notesStore.ts` callers expect the patch to be visible to the next `getPluginData()` call in the same handler.
+`applyPluginDataDelta` MUST be synchronous — `src/store/notesStore.ts` callers expect the patch to be visible to the next `getPluginData()` call in the same handler.
 
 ## Failure modes
 
-- **Old host without `applyPluginDataDelta` on the bridge**: `createPluginAPI` falls back to a whole-data `setPluginData` call. Mutations succeed but are NOT undo-able. (Fallback is in `client/src/plugins/api.ts`.)
+- **Old host without `applyPluginDataDelta` on the bridge**: the plugin's API wrapper (mirror of the host bridge) falls back to a whole-data `setPluginData` call. Mutations succeed but are NOT undo-able.
 - **Old host without `mountOverlay`**: archon-note never mounts. The plugin becomes a no-op. There is no graceful fallback to a modal — `displayMode: 'canvas-overlay'` is intentional.
-- **Old host without `getViewport`**: `readViewport` (in `store/viewport.ts`) returns an identity viewport sized to `window.innerWidth/Height`. Notes will show but coordinates won't track the canvas — better to fix the host than to ship without `getViewport`.
+- **Old host without `getViewport`**: `readViewport` (in `src/store/viewport.ts`) returns an identity viewport sized to `window.innerWidth/Height`. Notes will show but coordinates won't track the canvas — better to fix the host than to ship without `getViewport`.
 - **Old host without `subscribeToProjectChanges`**: archon-note renders once per mount and never updates. Don't ship without this.
 
 ## What the host owns vs what archon-note owns
 
 | Concern | Owner |
 |---------|-------|
-| Plugin script loading | host (loader.ts) |
-| Plugin registration | host (registry.ts) |
-| Overlay container DOM (`<div data-plugin-overlay>`) | host (CanvasOverlayPluginHost.tsx) |
-| Plugin icon UI in palettes / drawers | host |
-| `onIconClick` dispatch from icon press | host (PluginHost.tsx) |
+| Plugin script loading | host |
+| Plugin registration | host |
+| Overlay container DOM (`<div data-plugin-overlay>`) | host |
+| Plugin icon UI surfaces (palettes, drawers, etc.) | host |
+| `onIconClick` dispatch from icon press | host |
 | Note DOM, drag, resize, edit, color picker, font toggle, fitText | archon-note |
-| Note shape, validation, default values | archon-note (`types.ts`, `notesStore.ts`, `colors.ts`, `constants.ts`) |
+| Note shape, validation, default values | archon-note (`src/types.ts`, `src/store/notesStore.ts`, `src/colors.ts`, `src/constants.ts`) |
 | Persistence wire format | host's `pluginData` slot — archon-note picks the inner shape |
 | Undo command type | host (`'PLUGIN_DATA_UPDATE'`) — archon-note opts in by using `applyPluginDataDelta` |
