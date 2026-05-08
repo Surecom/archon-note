@@ -27,6 +27,7 @@ interface ArchonNote {
   text: string;                                 // freeform; \n preserved
   bgColor: string;                              // hex from NOTE_PALETTE
   fontFamily: 'sans' | 'marker';                // see FONT_STACKS in src/constants.ts
+  layerId: string;                              // host integration-layer id (scopes visibility)
 }
 ```
 
@@ -40,6 +41,7 @@ interface ArchonNote {
 | `text` | UTF-8 string; freeform. Empty allowed. |
 | `bgColor` | Hex; should match a swatch from `src/colors.ts`. Unknown hex falls back to default text color. |
 | `fontFamily` | Exactly `'sans'` (system Sans Serif) or `'marker'` (Permanent Marker via Google Fonts). Legacy `'serif'` from older plugin builds is normalized to `'marker'` on read in `src/store/notesStore.ts` `normalizeNote`. Anything else is treated as `'sans'`. |
+| `layerId` | Non-empty string referencing a host `IntegrationLayer.id`. Set at creation time from `api.getSelectedLayerId()`. Notes are only rendered on the layer matching this id (see `src/components/NotesOverlay.tsx`). Legacy notes saved before this field existed are migrated to `'default-layer'` on read (the host always provisions a layer with that id). If the referenced layer is later deleted by the user, the note remains in `pluginData` but becomes invisible (no layer to render it on); the uninstall confirmation still counts it. |
 
 ### What is NOT stored
 
@@ -55,10 +57,17 @@ interface ArchonNote {
 ```
 const raw = api.getPluginData() as Partial<ArchonNotePluginData> | undefined;
 notes      = raw?.notes  if object, else {}
+            (each note is run through normalizeNote → field defaults + migrations)
 noteOrder  = raw?.noteOrder if array, else Object.keys(notes)
             then drop ids missing from notes
             then append any notes missing from order (defensive: external mutations)
 ```
+
+`normalizeNote(raw)` per-note migrations and defaults:
+
+- `fontFamily`: `'serif'` → `'marker'`; unknown → `'sans'`
+- `layerId`: missing / non-string / empty → `'default-layer'`
+- `position`, `size`, `text`, `bgColor`: missing fields → safe defaults
 
 This means the plugin tolerates:
 
@@ -66,6 +75,7 @@ This means the plugin tolerates:
 - A missing `notes` or `noteOrder` field
 - A `noteOrder` that references deleted notes (filtered out)
 - A `notes` set that has ids missing from `noteOrder` (appended)
+- Notes saved before any field migration was added (defaults filled in on read; never rewritten to disk until the user mutates the note)
 
 ## How a mutation flows
 

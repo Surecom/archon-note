@@ -1,7 +1,7 @@
 {
   "id": "archon-note",
-  "name": "Archon Note",
-  "version": "1.0.16",
+  "name": "ArchON Note",
+  "version": "1.1.20",
   "description": "Sticky notes on the canvas. Click the icon to drop a note in the viewport center; double-click to edit; click once to select & resize.",
   "author": "Surecom",
   "icon": "StickyNote",

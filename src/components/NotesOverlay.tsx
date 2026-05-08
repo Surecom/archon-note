@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArchonPluginAPI } from '../types';
 import { readNotesData } from '../store/notesStore';
 import Note from './Note';
@@ -14,10 +14,13 @@ type SelectionState = {
   popupOpen: boolean;
 } | null;
 
+const FALLBACK_LAYER_ID = 'default-layer';
+
 const NotesOverlay: React.FC<Props> = ({ api }) => {
-  // Notes / view-mode / drawing-mode are subscribed via React state — they
-  // change rarely and need to trigger re-render (chrome visibility, mounting
-  // of new note components, etc.).
+  // Notes / view-mode / drawing-mode / selected-layer are subscribed via
+  // React state — they change rarely and need to trigger re-render
+  // (chrome visibility, mounting of new note components, switching the
+  // visible-note set when the user picks a different integration layer, etc.).
   //
   // Viewport is NOT in React state. Each Note reads it via api.getViewport()
   // inside its own rAF loop and applies viewport-driven DOM mutations directly
@@ -48,6 +51,21 @@ const NotesOverlay: React.FC<Props> = ({ api }) => {
     return api.subscribeToDrawingMode(refresh);
   }, [api]);
 
+  // ---------- Selected integration layer ----------
+  // Notes are scoped to the layer they were created on (`note.layerId`).
+  // Only notes matching the currently selected layer are rendered. When the
+  // user switches layers, the visible-note set instantly swaps without any
+  // mutation to pluginData.
+  const [selectedLayerId, setSelectedLayerId] = useState<string>(
+    () => api.getSelectedLayerId?.() || FALLBACK_LAYER_ID,
+  );
+  useEffect(() => {
+    const refresh = () => setSelectedLayerId(api.getSelectedLayerId?.() || FALLBACK_LAYER_ID);
+    refresh();
+    if (!api.subscribeToSelectedLayer) return;
+    return api.subscribeToSelectedLayer(refresh);
+  }, [api]);
+
   // ---------- selection ----------
 
   const [selection, setSelection] = useState<SelectionState>(null);
@@ -61,6 +79,14 @@ const NotesOverlay: React.FC<Props> = ({ api }) => {
   useEffect(() => {
     if (isViewMode || isDrawingMode) setSelection(null);
   }, [isViewMode, isDrawingMode]);
+
+  // Drop selection when the selected note belongs to a layer that's no
+  // longer visible (user switched away from the note's home layer).
+  useEffect(() => {
+    if (!selection) return;
+    const note = data.notes[selection.id];
+    if (note && note.layerId !== selectedLayerId) setSelection(null);
+  }, [selectedLayerId, selection, data.notes]);
 
   const handleSelect = useCallback((id: string) => {
     setSelection(s => s && s.id === id ? { ...s, mode: 'selected' } : { id, mode: 'selected', popupOpen: false });
@@ -76,9 +102,19 @@ const NotesOverlay: React.FC<Props> = ({ api }) => {
     setSelection(s => (s && s.id === id && s.popupOpen) ? { ...s, popupOpen: false } : s);
   }, []);
 
+  // Filter the render list to notes belonging to the currently selected layer.
+  // Preserves z-order from `data.noteOrder`.
+  const visibleIds = useMemo(
+    () => data.noteOrder.filter((id) => {
+      const n = data.notes[id];
+      return !!n && n.layerId === selectedLayerId;
+    }),
+    [data.noteOrder, data.notes, selectedLayerId],
+  );
+
   return (
     <>
-      {data.noteOrder.map((id) => {
+      {visibleIds.map((id) => {
         const note = data.notes[id];
         if (!note) return null;
         const isThis = selection?.id === id;

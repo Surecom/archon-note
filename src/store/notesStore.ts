@@ -12,9 +12,15 @@ function normalizeFontFamily(v: unknown): NoteFontFamily {
   return 'sans';
 }
 
+/** Default integration-layer id used when migrating legacy notes (predating
+ *  the `layerId` field on `ArchonNote`). The host always provisions an
+ *  integration layer with this id (`'default-layer'`) on every project,
+ *  making it a safe destination for orphan notes. */
+const LEGACY_DEFAULT_LAYER_ID = 'default-layer';
+
 function normalizeNote(raw: unknown): ArchonNote | null {
   if (!raw || typeof raw !== 'object') return null;
-  const r = raw as Partial<ArchonNote> & { fontFamily?: unknown };
+  const r = raw as Partial<ArchonNote> & { fontFamily?: unknown; layerId?: unknown };
   if (typeof r.id !== 'string') return null;
   return {
     id: r.id,
@@ -27,6 +33,11 @@ function normalizeNote(raw: unknown): ArchonNote | null {
     text: typeof r.text === 'string' ? r.text : '',
     bgColor: typeof r.bgColor === 'string' ? r.bgColor : '#ffd84d',
     fontFamily: normalizeFontFamily(r.fontFamily),
+    // Migration: notes saved before the layerId field existed get assigned
+    // to the default integration layer (the one the host always creates).
+    layerId: typeof r.layerId === 'string' && r.layerId.length > 0
+      ? r.layerId
+      : LEGACY_DEFAULT_LAYER_ID,
   };
 }
 

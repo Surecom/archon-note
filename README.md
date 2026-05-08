@@ -1,5 +1,16 @@
 # archon-note
 
+[![License](https://img.shields.io/github/license/Surecom/archon-note?style=for-the-badge&color=blue&logo=opensourceinitiative&logoColor=white)](LICENSE)
+[![Repo version](https://img.shields.io/github/package-json/v/Surecom/archon-note?style=for-the-badge&label=repo&color=2496ed&logo=github&logoColor=white)](package.json)
+[![Marketplace version](https://img.shields.io/badge/dynamic/json?style=for-the-badge&url=https%3A%2F%2Fsurecom.in%2Fapi%2Fplugins%2Farchon-note%2Fmeta&query=%24.version&label=marketplace&color=8a2be2&prefix=v&logo=rocket&logoColor=white)](https://archon.su)
+[![Bundle size](https://img.shields.io/badge/dynamic/json?style=for-the-badge&url=https%3A%2F%2Fsurecom.in%2Fapi%2Fplugins%2Farchon-note%2Fmeta&query=%24.bundleSize&label=bundle%20size&color=informational&logo=webpack&logoColor=white)](https://surecom.in/api/plugins/archon-note/meta)
+
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Surecom/archon-note/pulls)
+[![Made for ArchON](https://img.shields.io/badge/Made%20for-ArchON-1e88e5?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyTDIgN3YxMGwxMCA1IDEwLTVWN0wxMiAyem0wIDIuMjRMMTkuNzYgOCAxMiAxMS43NiA0LjI0IDggMTIgNC4yNHpNNCA5LjI0bDcgMy41djcuNTJsLTctMy41VjkuMjR6bTkgMTEuMDJWMTIuNzRsNy0zLjV2Ny41MmwtNyAzLjV6Ii8%2BPC9zdmc%2B)](https://archon.su)
+[![Code Quality](https://www.codefactor.io/repository/github/surecom/archon-note/badge?style=for-the-badge)](https://www.codefactor.io/repository/github/surecom/archon-note)
+[![Known vulnerabilities](https://img.shields.io/snyk/vulnerabilities/github/Surecom/archon-note?style=for-the-badge&logo=snyk&logoColor=white)](https://snyk.io/test/github/Surecom/archon-note)
+[![Dependencies](https://img.shields.io/librariesio/github/Surecom/archon-note?style=for-the-badge&logo=librariesdotio&logoColor=white)](https://libraries.io/github/Surecom/archon-note)
+
 Sticky-note overlay for the [ArchON](https://archon.su) canvas. Public plugin. Authored from scratch.
 
 > **Looking for the architecture or full spec?** Everything is in the [`docs/`](docs/) folder of this repository — `ARCHITECTURE.md`, `DATA_MODEL.md`, `HOST_CONTRACT.md`, `UI_SPEC.md`. Each file covers one concern (state machine, data shape, host API contract, visual spec) so you can read just the part you need without scanning the whole source tree.
@@ -21,6 +32,8 @@ A selected note inside the ArchON canvas with the styling popup open — 16-colo
 - `Delete` / `Backspace` while selected → delete the note (skipped if focus is in any input).
 - All actions are undo-able with global `Cmd+Z`.
 - Notes persist with the project (localStorage, JSON export, Google Drive).
+- **Notes are scoped to integration layers** — each note belongs to the layer it was created on, and is hidden when the user switches to a different layer. The `layerId` is part of the persisted note schema.
+- **Remove confirmation** — when the user attempts to remove the plugin from the project, the host shows a `ConfirmModal` listing how many notes live on each integration layer; removal (and deletion of all notes) only proceeds on confirm. No notes in the project → silent removal, no modal.
 
 ## Performance
 

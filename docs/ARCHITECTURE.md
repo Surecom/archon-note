@@ -227,6 +227,60 @@ Combined with the parent flex `align-items:center`, this means:
 
 CSS in `fonts.css` mirrors this: `[data-archon-note-textarea]` uses `height: auto; min-height: 1em; max-height: 100%`. The JS height set via `style.height` overrides the CSS default for measurement-driven sizing.
 
+## Integration-layer scoping
+
+Notes are scoped to host integration layers exactly the way systems / containers / users are. Each note carries a `layerId` (`ArchonNote.layerId`) set at creation time from `api.getSelectedLayerId()`. A note is rendered ONLY when the host's currently selected layer matches its `layerId`.
+
+### Where it happens
+
+```
+NotesOverlay.tsx
+  ├── selectedLayerId state (initialised from api.getSelectedLayerId() ?? 'default-layer')
+  ├── effect: api.subscribeToSelectedLayer(refresh) → re-set selectedLayerId on layer pick
+  ├── visibleIds = useMemo(() => noteOrder.filter(id => notes[id].layerId === selectedLayerId))
+  └── renders ONLY visibleIds
+```
+
+`noteOrder` is preserved across the filter so z-order within a layer is stable.
+
+### Selection auto-deselect on layer switch
+
+If the currently selected note is filtered out by a layer switch (its `layerId` no longer matches `selectedLayerId`), `NotesOverlay` clears `selection`. The styling popup, edit textarea, and any drag/resize state are torn down by the React unmount of the underlying `Note` component.
+
+### Note creation
+
+`onIconClick` (in `src/index.tsx`) reads `api.getSelectedLayerId()` (helper `getActiveLayerId(api)`) and tags the new note with that id. New notes always belong to whatever layer was active when the icon was clicked.
+
+### Migration
+
+Notes saved before `layerId` existed have `layerId === undefined` in the raw data. `normalizeNote` (in `src/store/notesStore.ts`) maps that to `'default-layer'` — the host always provisions a layer with that id, so the legacy notes show up on whatever the user's default layer is. Migration happens on read only; no rewrite to `pluginData` until the user mutates the note.
+
+### Layer deletion behavior
+
+If the user deletes the layer a note belongs to, the note remains in `pluginData` but becomes invisible (no layer to render it on). The host's project save/load preserves it. The uninstall confirmation still counts orphan notes (`getLayerName(api, layerId)` falls back to the raw id when the layer isn't found, so the user sees something like `auth-flow: 5 notes` instead of a friendly name).
+
+### Host API requirements
+
+Two optional methods on `ArchonPluginAPI` (host >= 2026-05-08): `getSelectedLayerId()` and `subscribeToSelectedLayer(cb)`. Both have fallbacks — older hosts that don't expose them will keep all notes on `'default-layer'` and never trigger the subscription, which mirrors the pre-layer behavior.
+
+## Uninstall confirmation flow (`beforeUninstall`)
+
+The plugin implements `ArchonPlugin.beforeUninstall(api)` (in `src/index.tsx`) so the host shows a `ConfirmModal` before deleting the plugin (and with it, every note in the project).
+
+### Behavior
+
+- If `pluginData.notes` is empty → returns `null` → host uninstalls silently (no modal).
+- Otherwise → groups notes by `layerId`, looks up each layer's display name via `api.getProjectState().integrationLayers[layerId].name`, builds a `PluginUninstallConfirmation` with one item per layer (`{ label: layerName, detail: 'N notes' }`), and returns it. The host's `ConfirmModal` shows the items as a bulleted list. Only `Uninstall and delete notes` triggers the actual uninstall.
+
+### Why this matters
+
+The previous "silent" uninstall was destructive — the user could lose every note in the project with one click and no recoverable state (uninstall is not undo-able by design). The confirmation gives the user an inventory of what they're about to lose, grouped by where they live.
+
+### Robustness
+
+- The hook is sync and pure-read (no side effects) — safe to call multiple times.
+- If the hook throws, the host logs the error and falls through to silent uninstall (refusing to uninstall on a buggy hook would trap the user).
+
 ## Drawing-mode + view-mode handling
 
 `NotesOverlay` reads `api.getIsViewMode()` and `api.getIsDrawingMode()` and subscribes to changes. Each `Note` receives both flags. Behavior:

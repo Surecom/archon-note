@@ -19,6 +19,12 @@ export type NoteFontFamily = 'sans' | 'marker';
  * `position` and `size` are world coordinates (the same coordinate system the
  * canvas uses for systems / containers). Font size is NOT stored — it is
  * recomputed every render via `utils/fitText.ts`.
+ *
+ * `layerId` ties the note to a specific integration layer of the host project
+ * — the note is only visible on that layer (mirrors how the host's own
+ * elements are scoped to layers). Set at creation time from the active
+ * `selectedLayerId`. Legacy notes without `layerId` (predating this field)
+ * are migrated to `'default-layer'` by `notesStore.normalizeNote`.
  */
 export interface ArchonNote {
   id: string;
@@ -27,6 +33,7 @@ export interface ArchonNote {
   text: string;
   bgColor: string;
   fontFamily: NoteFontFamily;
+  layerId: string;
 }
 
 export interface ArchonNotePluginData {
@@ -69,6 +76,22 @@ export interface ArchonPluginAPI {
   getCanvasElement?(): HTMLCanvasElement | null;
   attachCanvasWheelForwarding?(element: HTMLElement): () => void;
   subscribeToViewportFrame?(cb: (vp: ViewportSnapshot) => void): () => void;
+  // Selected-layer access (host >= 2026-05-08). Used to scope notes to the
+  // user's currently active integration layer.
+  getSelectedLayerId?(): string | null;
+  subscribeToSelectedLayer?(cb: () => void): () => void;
+}
+
+/**
+ * Optional payload `beforeUninstall(api)` can return to make the host show a
+ * confirmation modal before uninstalling. Mirrors the host's contract.
+ */
+export interface PluginUninstallConfirmation {
+  title?: string;
+  message: string;
+  items?: Array<{ label: string; detail?: string }>;
+  confirmLabel?: string;
+  cancelLabel?: string;
 }
 
 export interface ArchonPlugin {
@@ -83,4 +106,13 @@ export interface ArchonPlugin {
   mountOverlay?(container: HTMLElement, api: ArchonPluginAPI): void;
   unmountOverlay?(): void;
   onIconClick?(api: ArchonPluginAPI): void;
+  /**
+   * Called by the host immediately before uninstalling. Return a
+   * confirmation payload to make the host show a `ConfirmModal` and only
+   * proceed on user confirm; return `null` for silent uninstall.
+   */
+  beforeUninstall?(api: ArchonPluginAPI):
+    | Promise<PluginUninstallConfirmation | null>
+    | PluginUninstallConfirmation
+    | null;
 }
