@@ -8,8 +8,8 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Surecom/archon-note/pulls)
 [![Made for ArchON](https://img.shields.io/badge/Made%20for-ArchON-1e88e5?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyTDIgN3YxMGwxMCA1IDEwLTVWN0wxMiAyem0wIDIuMjRMMTkuNzYgOCAxMiAxMS43NiA0LjI0IDggMTIgNC4yNHpNNCA5LjI0bDcgMy41djcuNTJsLTctMy41VjkuMjR6bTkgMTEuMDJWMTIuNzRsNy0zLjV2Ny41MmwtNyAzLjV6Ii8%2BPC9zdmc%2B)](https://archon.su)
 [![Code Quality](https://www.codefactor.io/repository/github/surecom/archon-note/badge?style=for-the-badge)](https://www.codefactor.io/repository/github/surecom/archon-note)
-[![Known vulnerabilities](https://img.shields.io/snyk/vulnerabilities/github/Surecom/archon-note?style=for-the-badge&logo=snyk&logoColor=white)](https://snyk.io/test/github/Surecom/archon-note)
 [![Dependencies](https://img.shields.io/librariesio/github/Surecom/archon-note?style=for-the-badge&logo=librariesdotio&logoColor=white)](https://libraries.io/github/Surecom/archon-note)
+[![Known vulnerabilities](https://snyk.io/test/github/Surecom/archon-note/badge.svg)](https://snyk.io/test/github/Surecom/archon-note)
 
 Sticky-note overlay for the [ArchON](https://archon.su) canvas. Public plugin. Authored from scratch.
 
